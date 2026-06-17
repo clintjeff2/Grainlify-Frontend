@@ -7,9 +7,13 @@
     "build": "vite build",
     "dev": "vite",
     "generate-favicon": "node scripts/generate-favicon.mjs",
+    "lint": "eslint src",
+    "lint:fix": "eslint src --fix",
+    "format": "prettier --write src",
+    "format:check": "prettier --check src",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:coverage": "vitest run --coverage",
-    "lint": "eslint src"
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@emotion/react": "11.14.0",
@@ -75,6 +79,7 @@
     "vaul": "1.1.2"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.4",
     "@tailwindcss/vite": "4.1.12",
     "@types/react": "^19.2.9",
     "@types/react-dom": "^19.2.3",
@@ -82,10 +87,15 @@
     "@typescript-eslint/parser": "^8.61.1",
     "@vitejs/plugin-react": "4.7.0",
     "@vitest/coverage-v8": "^4.1.9",
-    "eslint": "^10.5.0",
+    "eslint": "^9.39.4",
+    "eslint-config-prettier": "^9.1.2",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-react-refresh": "~0.4.26",
+    "prettier": "^3.8.4",
     "sharp": "^0.34.5",
     "tailwindcss": "4.1.12",
     "to-ico": "^1.1.5",
+    "typescript-eslint": "^8.61.1",
     "vite": "6.3.5",
     "vitest": "^4.1.9"
   },

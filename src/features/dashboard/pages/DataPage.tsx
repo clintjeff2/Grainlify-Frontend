@@ -399,14 +399,15 @@ export function DataPage() {
                 <ZoomableGroup
                   zoom={mapZoom}
                   center={mapCenter}
-                  onMoveEnd={({ coordinates, zoom }) => {
+                  onMoveEnd={({ coordinates, zoom }: { coordinates: [number, number]; zoom: number }) => {
                     setMapCenter(coordinates as [number, number]);
                     setMapZoom(zoom);
                   }}
                 >
                   <Geographies geography={geoUrl}>
-                    {({ geographies }) =>
-                      geographies.map((geo) => {
+                    {({ geographies }: { geographies: unknown[] }) =>
+                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                      geographies.map((geo: any) => {
                         const isHighlighted = Object.keys(countryCoordinates).some(country =>
                           geo.properties.name === country ||
                           (country === "United Kingdom" && geo.properties.name === "United Kingdom") || // Add aliases if needed

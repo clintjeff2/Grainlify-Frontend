@@ -296,7 +296,7 @@ export function DashboardComplete() {
                 </button>
 
                 {/* User Profile Dropdown */}
-                <UserProfileDropdown />
+                <UserProfileDropdown showMobileNav={false} />
               </div>
             </div>
           </div>
@@ -358,9 +358,8 @@ export function DashboardComplete() {
               type="password"
               placeholder="Enter admin password"
               value={adminPassword}
-              onChange={(e) => setAdminPassword(e.target.value)}
+              onChange={(value) => setAdminPassword(value)}
               required
-              autoFocus
             />
           </div>
           <ModalFooter>
@@ -1261,6 +1260,7 @@ function EcosystemsPage() {
             );
           })}
         </div>
+      )}
 
       {/* Request Ecosystem Section */}
       <div className={`backdrop-blur-[40px] bg-gradient-to-br rounded-[24px] border shadow-[0_8px_32px_rgba(0,0,0,0.08)] p-10 transition-all overflow-hidden relative ${

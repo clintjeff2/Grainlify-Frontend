@@ -111,7 +111,7 @@ const [errorMessage, setErrorMessage] = useState<string | null>(null);
               <div key={idx} className="grid grid-cols-2 gap-4 items-center py-4 border-b border-white/5">
                 {/* Project Column Skeleton */}
                 <div className="flex items-center gap-3">
-                  <SkeletonLoader variant="circle" className="w-10 h-10 flex-shrink-0" />
+                  <SkeletonLoader className="w-10 h-10 flex-shrink-0" />
                   <div className="flex flex-col gap-2">
                     <SkeletonLoader className="h-4 w-32" />
                     <SkeletonLoader className="h-3 w-24" />
@@ -180,7 +180,7 @@ const [errorMessage, setErrorMessage] = useState<string | null>(null);
                       project.language ? '' : 'bg-gradient-to-br from-[#c9983a]/20 to-[#a67c2e]/20 border border-[#c9983a]/30'
                     }`}>
                       {project.language ? (
-                        <LanguageIcon language={project.language} size={40} />
+                        <LanguageIcon language={project.language} />
                       ) : (
                         <span className={`text-[14px] font-bold transition-colors ${
                           theme === 'dark' ? 'text-[#d4c5b0]' : 'text-[#2d2820]'

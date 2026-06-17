@@ -830,7 +830,7 @@ export function Dashboard() {
                     />
                   )}
                 {currentPage === "contributors" && <ContributorsPage />}
-                {currentPage === "maintainers" && <MaintainersPage />}
+                {currentPage === "maintainers" && <MaintainersPage onNavigate={setCurrentPage} />}
                 {currentPage === "profile" && (
                   <ProfilePage
                     viewingUserId={viewingUserId}
@@ -940,7 +940,6 @@ export function Dashboard() {
               value={adminPassword}
               onChange={(value) => setAdminPassword(value)}
               required
-              autoFocus
             />
             <p
               className={`text-xs ${darkTheme ? "text-[#b8a898]" : "text-[#7a6b5a]"}`}

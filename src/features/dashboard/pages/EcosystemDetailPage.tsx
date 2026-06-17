@@ -177,7 +177,7 @@ export function EcosystemDetailPage({ ecosystemId, ecosystemName, initialDescrip
       : hasDetail
         ? []
         : [
-            { label: 'Official Website', url: detail?.website_url || 'web3.ecosystem.example', icon: 'website' },
+            { label: 'Official Website', url: 'web3.ecosystem.example', icon: 'website' },
             { label: 'Discord Community', url: 'discord.gg', icon: 'discord' },
             { label: 'Twitter', url: 'twitter.com', icon: 'twitter' },
           ].map(({ label, url }) => ({ label, url })),

@@ -57,7 +57,7 @@ async function apiRequest<T>(
   } else if (
     method !== "GET" &&
     method !== "HEAD" &&
-    !("Content-Type" in (requestHeaders as any))
+    !("Content-Type" in requestHeaders)
   ) {
     // Non-GET/HEAD without an explicit content-type: default to JSON for our API.
     requestHeaders["Content-Type"] = "application/json";
@@ -337,6 +337,11 @@ export const updateProfile = (data: {
   location?: string;
   website?: string;
   bio?: string;
+  telegram?: string;
+  linkedin?: string;
+  whatsapp?: string;
+  twitter?: string;
+  discord?: string;
 }) =>
   apiRequest<{ message: string }>("/profile/update", {
     method: "PUT",

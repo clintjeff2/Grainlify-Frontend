@@ -79,7 +79,7 @@ const cleanIssueDescription = (
   }
 
   // Remove markdown headers and formatting
-  let cleaned = description
+  const cleaned = description
     // Remove markdown headers (##, ###, etc.)
     .replace(/^#{1,6}\s+/gm, "")
     // Remove bold/italic markdown (**text**, *text*)

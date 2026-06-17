@@ -1019,7 +1019,7 @@ export function AdminPage() {
                       const reader = new FileReader();
                       reader.onload = () => {
                         if (typeof reader.result === 'string') {
-                          setFormData(prev => ({ ...prev, logoUrl: reader.result || '' }));
+                          setFormData(prev => ({ ...prev, logoUrl: reader.result as string }));
                         }
                       };
                       reader.readAsDataURL(file);
@@ -1201,7 +1201,7 @@ export function AdminPage() {
                       const reader = new FileReader();
                       reader.onload = () => {
                         if (typeof reader.result === 'string') {
-                          setEditFormData(prev => ({ ...prev, logoUrl: reader.result || '' }));
+                          setEditFormData(prev => ({ ...prev, logoUrl: reader.result as string }));
                         }
                       };
                       reader.readAsDataURL(file);
