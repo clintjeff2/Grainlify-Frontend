@@ -143,6 +143,35 @@ Contributions are welcome! Please ensure your changes:
 
 See [LICENSE](./LICENSE) file for details.
 
+## Bundle Size and Analysis
+
+To ensure that the application bundle size does not grow uncontrollably, we enforce a strict bundle budget in our CI/CD pipeline and provide tools to analyze package sizes.
+
+### Bundle Budget
+
+We monitor the size of the compiled **main chunk** (`dist/assets/index-*.js`). If the size exceeds the defined budget, the build pipeline will fail.
+
+- **Baseline Main Chunk Size**: `1,732.13 KB` (approx. `1.77 MB` raw, `464.52 KB` gzipped)
+- **Main Chunk Size Budget**: `1,800 KB`
+
+### Running Local Analysis
+
+You can generate a visual bundle analysis report to see what dependencies are consuming the most space:
+
+1. Run the analyze script:
+   ```bash
+   npm run analyze
+   ```
+2. Open the generated report located at `dist/stats.html` in your browser. This file is automatically gitignored and will not be committed to the repository.
+
+### Running Size Checks Locally
+
+To manually check if the compiled bundle is within the size budget:
+
+```bash
+npm run test:bundle-size
+```
+
 ## Documentation
 
 - [API Integration Guide](./API_INTEGRATION.md) - Backend API integration details

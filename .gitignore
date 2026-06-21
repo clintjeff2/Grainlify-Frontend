@@ -21,6 +21,8 @@ coverage
 dist
 dist-ssr
 build
+stats.html
+dist/stats.html
 *.local
 
 # Environment variables
