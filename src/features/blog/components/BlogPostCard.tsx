@@ -1,4 +1,5 @@
 import { Calendar, Clock, ArrowRight } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { useTheme } from '../../../shared/contexts/ThemeContext';
 import { BlogPost } from '../types';
 
@@ -6,11 +7,24 @@ interface BlogPostCardProps {
   post: BlogPost;
 }
 
+/**
+ * A clickable preview card for a single blog post.
+ *
+ * The entire card is a React Router {@link Link} to the article's deep link
+ * (`/dashboard/blog/:slug`). Using a single anchor — rather than a nested
+ * button — keeps the markup accessible: the card is reachable by keyboard,
+ * activates on Enter, and exposes a visible focus ring. The "Read More"
+ * affordance is therefore a non-interactive `span`, not a second control.
+ */
 export function BlogPostCard({ post }: BlogPostCardProps) {
   const { theme } = useTheme();
 
   return (
-    <div className="backdrop-blur-[30px] bg-white/[0.15] rounded-[20px] border border-white/25 p-6 hover:bg-white/[0.2] hover:shadow-[0_8px_24px_rgba(0,0,0,0.08)] transition-all cursor-pointer group">
+    <Link
+      to={`/dashboard/blog/${post.slug}`}
+      aria-label={`Read more: ${post.title}`}
+      className="block backdrop-blur-[30px] bg-white/[0.15] rounded-[20px] border border-white/25 p-6 hover:bg-white/[0.2] hover:shadow-[0_8px_24px_rgba(0,0,0,0.08)] transition-all cursor-pointer group focus:outline-none focus-visible:ring-2 focus-visible:ring-[#c9983a] focus-visible:ring-offset-2 focus-visible:ring-offset-transparent"
+    >
       <div className="w-16 h-16 rounded-[16px] bg-gradient-to-br from-[#c9983a] to-[#a67c2e] flex items-center justify-center shadow-lg text-3xl mb-4 border border-white/15 group-hover:scale-110 transition-transform duration-300">
         {post.icon}
       </div>
@@ -49,10 +63,10 @@ export function BlogPostCard({ post }: BlogPostCardProps) {
         </span>
       </div>
 
-      <button className="text-[14px] font-semibold text-[#c9983a] hover:text-[#a67c2e] transition-colors flex items-center gap-2">
+      <span className="text-[14px] font-semibold text-[#c9983a] group-hover:text-[#a67c2e] transition-colors flex items-center gap-2">
         Read More
         <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-      </button>
-    </div>
+      </span>
+    </Link>
   );
 }

@@ -11,6 +11,7 @@ import { ProfilePage } from "../features/dashboard/pages/ProfilePage";
 import { DataPage } from "../features/dashboard/pages/DataPage";
 import { LeaderboardPage } from "../features/leaderboard/pages/LeaderboardPage";
 import { BlogPage } from "../features/blog/pages/BlogPage";
+import { BlogArticlePage } from "../features/blog/pages/BlogArticlePage";
 import { SettingsPage } from "../features/settings/pages/SettingsPage";
 import { AdminPage } from "../features/admin/pages/AdminPage";
 import {
@@ -73,6 +74,9 @@ export default function App() {
                 <Route path="projects/:projectId/issues/:issueId" element={<IssueDetailPageRoute />} />
                 <Route path="leaderboard" element={<LeaderboardPage />} />
                 <Route path="blog" element={<BlogPage />} />
+                {/* Deep link to an individual article. The `:slug` param is
+                    untrusted input — see BlogArticlePage for sanitize+lookup. */}
+                <Route path="blog/:slug" element={<BlogArticlePage />} />
                 <Route path="settings" element={<SettingsPage />} />
                 <Route path="admin" element={<RoleGuard allow={['admin']}><AdminPage /></RoleGuard>} />
                 <Route path="search" element={<SearchPageRoute />} />
