@@ -27,8 +27,9 @@ import {
 import { NotFoundPage } from "../shared/components/NotFoundPage";
 import { RoleGuard } from "../shared/components/RoleGuard";
 import Toast from "../shared/components/Toast";
+import React from 'react';
 
-function ProtectedRoute({ children }: { children: JSX.Element }) {
+function ProtectedRoute({ children }: { children: React.JSX.Element }) {
   const { isAuthenticated, isLoading } = useAuth();
   const location = useLocation();
   if (isLoading) return children; // let AuthProvider finish initial check

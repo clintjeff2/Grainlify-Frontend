@@ -1,6 +1,6 @@
 import { logger } from '../../../shared/utils/logger';
 import { useState, useEffect, useRef } from 'react';
-import { Search, ChevronDown, Award, Briefcase, GitPullRequest, FolderGit2, Trophy, Github, Code, Globe, Sparkles, TrendingUp, Star, Users, GitFork, DollarSign, GitMerge, Calendar, ChevronRight, Filter, Circle, Eye, Crown, Link, ArrowLeft, Medal, Shield, LucideIcon } from 'lucide-react';
+import { Search, Award, GitPullRequest, FolderGit2, Trophy, Github, Code, Globe, Sparkles, Star, Users, GitFork, DollarSign, GitMerge, Calendar, ChevronRight, Circle, Eye, Crown, Link, ArrowLeft, Medal, Shield, LucideIcon } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { useTheme } from '../../../shared/contexts/ThemeContext';
 import { useAuth } from '../../../shared/contexts/AuthContext';
@@ -55,7 +55,7 @@ interface ProfilePageProps {
 
 export function ProfilePage({ viewingUserId, viewingUserLogin, onBack, onProjectClick, onIssueClick }: ProfilePageProps) {
   const { theme } = useTheme();
-  const { user, userRole } = useAuth();
+  const { user } = useAuth();
   const [profileData, setProfileData] = useState<ProfileData | null>(null);
   const [viewingUser, setViewingUser] = useState<{ login: string; avatar_url?: string } | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -76,14 +76,14 @@ export function ProfilePage({ viewingUserId, viewingUserLogin, onBack, onProject
   const [isLoadingProjects, setIsLoadingProjects] = useState(true);
   const [isLoadingCalendar, setIsLoadingCalendar] = useState(true);
   const [isLoadingActivity, setIsLoadingActivity] = useState(true);
-  const [selectedMonth, setSelectedMonth] = useState('all');
+  const [_selectedMonth, _setSelectedMonth] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedMonths, setExpandedMonths] = useState<{ [key: string]: boolean }>({});
   const [contributorModalOpen, setContributorModalOpen] = useState(false);
   const [leadModalOpen, setLeadModalOpen] = useState(false);
   const [showAllProjects, setShowAllProjects] = useState(false);
   const [projectsLed, setProjectsLed] = useState<Project[]>([]);
-  const [isLoadingProjectsLed, setIsLoadingProjectsLed] = useState(true);
+  const [_isLoadingProjectsLed, setIsLoadingProjectsLed] = useState(true);
 
   // Ref to avoid applying stale fetch results when the viewed user changes mid-request
   const viewingRef = useRef({ viewingUserId, viewingUserLogin });

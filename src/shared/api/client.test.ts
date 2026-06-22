@@ -14,7 +14,6 @@ import {
   getAuthToken,
   setAuthToken,
   removeAuthToken,
-  type ApiRequestOptions,
 } from './client';
 import { API_BASE_URL } from '../config/api';
 

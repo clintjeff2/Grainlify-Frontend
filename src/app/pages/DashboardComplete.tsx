@@ -3,9 +3,9 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Search, Bell, Settings, LogOut, Compass, Grid3x3, Calendar, 
-  Globe, Users, FolderGit2, Trophy, User, Database, Plus, 
+  Globe, Users, Trophy, User, Database, Plus, 
   FileText, ChevronRight, Sparkles, Heart, 
-  Star, GitFork, ArrowUpRight, Target, Zap, ChevronDown, 
+  Star, GitFork, ArrowUpRight, Target, Zap, 
   CircleDot, Clock, Moon, Sun, Shield, Send, X
 } from 'lucide-react';
 import grainlifyLogo from '../../assets/grainlify_log.svg';
@@ -45,15 +45,6 @@ export function DashboardComplete() {
     navigate('/');
   };
 
-  const handleAdminClick = () => {
-    // If already authenticated as admin in this session, go directly to admin page
-    if (adminAuthenticated) {
-      setCurrentPage('admin');
-      return;
-    }
-    // Always show password modal for non-authenticated users (even if they have admin role)
-    setShowAdminPasswordModal(true);
-  };
 
   const handleAdminPasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1576,7 +1567,7 @@ function EcosystemsPage() {
 function AdminPage() {
   const { theme } = useTheme();
   const [showAddModal, setShowAddModal] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [_isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     description: '',

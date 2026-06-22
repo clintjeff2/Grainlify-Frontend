@@ -176,7 +176,7 @@ export function SearchPageRoute() {
     navigate('/dashboard/discover');
   };
 
-  const handleIssueClick = (issueId: string) => {
+  const handleIssueClick = () => {
     // Navigate to the project/issue view
     navigate('/dashboard/discover');
   };
@@ -187,7 +187,7 @@ export function SearchPageRoute() {
     });
   };
 
-  const handleContributorClick = (contributorId: string) => {
+  const handleContributorClick = () => {
     navigate(`/dashboard/contributors`);
   };
 

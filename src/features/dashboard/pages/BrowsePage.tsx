@@ -180,7 +180,7 @@ export function BrowsePage({ onProjectClick }: BrowsePageProps) {
   const requestSeqRef = useRef(0);
 
   const [ecosystems, setEcosystems] = useState<Array<{ name: string }>>([]);
-  const [isLoadingEcosystems, setIsLoadingEcosystems] = useState(true);
+  const [_isLoadingEcosystems, setIsLoadingEcosystems] = useState(true);
 
   // Filter options data
   const filterOptions = {
@@ -272,12 +272,6 @@ export function BrowsePage({ onProjectClick }: BrowsePageProps) {
     }));
   };
 
-  const getFilteredOptions = (filterType: string) => {
-    const searchTerm = searchTerms[filterType].toLowerCase();
-    return filterOptions[filterType as keyof typeof filterOptions].filter(
-      (option: any) => option.name.toLowerCase().includes(searchTerm),
-    );
-  };
 
   /**
    * Load a page of projects for the current filters.

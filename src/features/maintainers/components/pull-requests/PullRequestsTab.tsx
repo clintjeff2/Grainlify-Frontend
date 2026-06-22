@@ -1,11 +1,11 @@
 import { logger } from '../../../../shared/utils/logger';
 import { useState, useEffect } from 'react';
-import { Search, Loader2, AlertCircle } from 'lucide-react';
+import { Search, AlertCircle } from 'lucide-react';
 import { useTheme } from '../../../../shared/contexts/ThemeContext';
 import { PRFilterType } from '../../types';
 import { PRRow } from './PRRow';
 import { PRFilterDropdown } from './PRFilterDropdown';
-import { getMyProjects, getProjectPRs } from '../../../../shared/api/client';
+import { getProjectPRs } from '../../../../shared/api/client';
 import { PRRowSkeleton } from '../../../../shared/components/PRRowSkeleton';
 
 interface PRFromAPI {
@@ -34,7 +34,7 @@ interface PullRequestsTabProps {
   onRefresh?: () => void;
 }
 
-export function PullRequestsTab({ selectedProjects, onRefresh }: PullRequestsTabProps) {
+export function PullRequestsTab({ selectedProjects }: PullRequestsTabProps) {
   const { theme } = useTheme();
   const [searchQuery, setSearchQuery] = useState('');
   const [filter, setFilter] = useState<PRFilterType>('All states');

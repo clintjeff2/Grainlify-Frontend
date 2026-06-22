@@ -28,6 +28,7 @@ export function BlogPage() {
           }
         })
         .catch((err) => {
+          // eslint-disable-next-line no-console
           console.error("Failed to fetch blog posts, using mock fallback:", err);
           setFeaturedPost(mockFeaturedPost);
           setRecentPosts(mockRecentPosts);

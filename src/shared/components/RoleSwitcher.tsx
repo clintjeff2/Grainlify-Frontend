@@ -13,7 +13,7 @@ interface RoleSwitcherProps {
   availableRoles?: RoleSwitcherRole[];
 }
 
-export function RoleSwitcher({ currentRole, onRoleChange, showMobileNav, isSmallDevice, closeMobileNav, availableRoles }: RoleSwitcherProps) {
+export function RoleSwitcher({ currentRole, onRoleChange, showMobileNav, closeMobileNav, availableRoles }: RoleSwitcherProps) {
   const { theme } = useTheme();
 
   const allRoles = [

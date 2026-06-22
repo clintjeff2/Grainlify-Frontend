@@ -15,7 +15,7 @@ import { useTheme } from "../../../shared/contexts/ThemeContext";
 export function ContributionsTab() {
   const { theme } = useTheme();
   const [isFilterOpen, setIsFilterOpen] = useState(false);
-  const [selectedProject, setSelectedProject] = useState("");
+  const [_selectedProject, setSelectedProject] = useState("");
   const [selectedRewards, setSelectedRewards] = useState<string[]>([
     "Rewarded",
     "Unrewarded",

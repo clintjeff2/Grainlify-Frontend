@@ -2,7 +2,7 @@ import { logger } from '../../../../shared/utils/logger';
 import { useState, useEffect, useRef } from 'react';
 import { Plus, X, Loader2, AlertCircle, Info, ChevronDown, MessageSquare } from 'lucide-react';
 import { toast } from 'sonner';
-import { BillingProfile, BillingProfileType, BillingProfileStatus, ProfileDetailTabType, PaymentMethod, Invoice } from '../../types';
+import { BillingProfile, BillingProfileType, BillingProfileStatus, ProfileDetailTabType, PaymentMethod } from '../../types';
 import { getBillingProfiles } from "../../../../shared/api/client";
 import { sampleInvoices } from '../../data/invoicesData';
 import { BillingProfileCard } from './BillingProfileCard';
@@ -129,7 +129,7 @@ export function BillingTab() {
   const { theme } = useTheme();
   const { profiles, setProfiles, addProfile, updateProfile } = useBillingProfiles();
   const useMock = import.meta.env.VITE_USE_MOCK_DATA === "true";
-  const [isLoading, setIsLoading] = useState(!useMock);
+  const [isLoading, _setIsLoading] = useState(!useMock);
   const [loadingProfiles, setLoadingProfiles] = useState(false);
 
   const [selectedProfile, setSelectedProfile] = useState<BillingProfile | null>(null);
@@ -182,7 +182,8 @@ export function BillingTab() {
         .then((data) => {
           setProfiles(data);
         })
-        .catch((err) => console.error('Failed to fetch billing profiles:', err))
+        .catch((err) => // eslint-disable-next-line no-console
+ console.error('Failed to fetch billing profiles:', err))
         .finally(() => setLoadingProfiles(false));
     }
   }, [useMock]);

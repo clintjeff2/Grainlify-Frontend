@@ -1,5 +1,5 @@
 import { ReactNode } from 'react';
-import { GitBranch, Users, Circle } from 'lucide-react';
+import { Users, Circle } from 'lucide-react';
 import { useTheme } from '../../contexts/ThemeContext';
 import { LanguageIcon } from '../LanguageIcon';
 
@@ -28,7 +28,6 @@ export interface IssueCardProps {
 }
 
 export function IssueCard({
-  id,
   number,
   title,
   repository,
@@ -38,7 +37,6 @@ export function IssueCard({
   tags = [],
   isSelected = false,
   onClick,
-  icon,
   showTags = false,
   description,
   language,

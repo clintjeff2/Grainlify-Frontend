@@ -1,5 +1,5 @@
 import React, { ReactNode } from 'react';
-import { getUserFriendlyError } from '../../utils/errorUtils';
+import { getUserFriendlyError } from '../utils/errorHandler';
 import './DataState.css';
 
 interface DataStateProps {

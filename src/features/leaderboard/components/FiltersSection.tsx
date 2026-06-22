@@ -1,5 +1,4 @@
-import { logger } from '../../../shared/utils/logger';
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { ChevronDown } from "lucide-react";
 import { useTheme } from "../../../shared/contexts/ThemeContext";
 import { getEcosystems } from "../../../shared/api/client";

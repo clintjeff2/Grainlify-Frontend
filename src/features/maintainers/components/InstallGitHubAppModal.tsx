@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, CheckCircle2, FileText, Code, GitBranch, Users, Loader2 } from 'lucide-react';
+import { X, FileText, Code, GitBranch, Users, Loader2 } from 'lucide-react';
 import { useTheme } from '../../../shared/contexts/ThemeContext';
 import { API_BASE_URL } from '../../../shared/config/api';
 import { getAuthToken } from '../../../shared/api/client';
@@ -10,7 +10,7 @@ interface InstallGitHubAppModalProps {
   onSuccess: () => void;
 }
 
-export function InstallGitHubAppModal({ isOpen, onClose, onSuccess }: InstallGitHubAppModalProps) {
+export function InstallGitHubAppModal({ isOpen, onClose }: InstallGitHubAppModalProps) {
   const { theme } = useTheme();
   const darkTheme = theme === 'dark';
   const [isInstalling, setIsInstalling] = useState(false);

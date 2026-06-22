@@ -50,7 +50,6 @@ export function Modal({
   icon,
   width = 'md',
   showCloseButton = true,
-  maxHeight = false,
   footer,
   dimBackdrop = true,
   ariaLabel

@@ -1,6 +1,5 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { logger } from '../../shared/utils/logger';
-import { getUserFriendlyError } from '../../shared/utils/errorHandler';
 
 /** Cache entry for optimistic data */
 interface CacheEntry<T> {

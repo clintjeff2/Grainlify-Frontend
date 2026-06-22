@@ -67,11 +67,6 @@ export function IssueDetailPage({ issueId, projectId, onClose }: IssueDetailPage
     return current ? [current, ...others] : others;
   }, [project, myProjects]);
 
-  const repoName = useMemo(() => {
-    const full = project?.github_full_name || '';
-    const parts = full.split('/');
-    return parts[1] || full || 'Project';
-  }, [project?.github_full_name]);
 
   return (
     <div className="space-y-4">

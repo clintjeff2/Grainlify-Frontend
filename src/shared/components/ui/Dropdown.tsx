@@ -1,6 +1,6 @@
 import { ChevronDown, Search, X } from 'lucide-react';
 import { useTheme } from '../../contexts/ThemeContext';
-import { useState, useRef, useEffect, ReactNode } from 'react';
+import { useRef, useEffect, ReactNode } from 'react';
 
 interface DropdownOption {
   name: string;

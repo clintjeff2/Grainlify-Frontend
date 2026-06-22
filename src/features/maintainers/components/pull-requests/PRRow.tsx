@@ -1,4 +1,4 @@
-import { GitPullRequest, User, Package, CircleCheck, CircleX, Trophy, Eye, Code } from 'lucide-react';
+import { GitPullRequest, CircleCheck, CircleX, Trophy, Eye, Code } from 'lucide-react';
 import { useTheme } from '../../../../shared/contexts/ThemeContext';
 import { PullRequest } from '../../types';
 

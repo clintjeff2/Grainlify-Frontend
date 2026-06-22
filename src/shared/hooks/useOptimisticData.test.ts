@@ -158,8 +158,8 @@ describe('useOptimisticData', () => {
   it('swallows AbortError and does not treat it as a real failure', async () => {
     const { result } = renderHook(() => useOptimisticData('initial'));
     
-    const fetchFn = vi.fn().mockImplementation((signal: AbortSignal) => {
-      return new Promise((resolve, reject) => {
+    const fetchFn = vi.fn().mockImplementation(() => {
+      return new Promise((_resolve, reject) => {
         const error = new Error('The user aborted a request.');
         error.name = 'AbortError';
         reject(error);

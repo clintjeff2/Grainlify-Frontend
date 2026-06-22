@@ -1,34 +1,20 @@
 import { logger } from '../../shared/utils/logger';
 import { useState, useEffect } from "react";
-import { Link, useNavigate, useLocation } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import {
   Search,
-  Bell,
   Compass,
   Grid3x3,
   Calendar,
   Globe,
   Users,
-  FolderGit2,
   Trophy,
   Database,
-  Plus,
   FileText,
   ChevronRight,
-  Sparkles,
-  Heart,
-  Star,
-  GitFork,
-  ArrowUpRight,
-  Target,
-  Zap,
-  ChevronDown,
-  CircleDot,
-  Clock,
   Moon,
   Sun,
   Shield,
-  Code,
   X,
   Menu
 } from "lucide-react";
@@ -36,7 +22,6 @@ import { useModeAnimation } from "react-theme-switch-animation";
 import { useAuth } from "../../shared/contexts/AuthContext";
 import grainlifyLogo from "../../assets/grainlify_log.svg";
 import { useTheme } from "../../shared/contexts/ThemeContext";
-import { LanguageIcon } from "../../shared/components/LanguageIcon";
 import { UserProfileDropdown } from "../../shared/components/UserProfileDropdown";
 import { NotificationsDropdown } from "../../shared/components/NotificationsDropdown";
 import { RoleSwitcher } from "../../shared/components/RoleSwitcher";
@@ -68,14 +53,13 @@ import { SearchPage } from "./pages/SearchPage";
 import { SettingsTabType } from "../settings/types";
 
 export function Dashboard() {
-  const { userRole, logout, login } = useAuth();
+  const { userRole, login } = useAuth();
   const { theme, setThemeFromAnimation } = useTheme();
   const location = useLocation();
   const { ref: themeToggleRef, toggleSwitchTheme } = useModeAnimation({
     isDarkMode: theme === "dark",
     onDarkModeChange: (isDark) => setThemeFromAnimation(isDark),
   });
-  const navigate = useNavigate();
   // const [currentPage, setCurrentPage] = useState('discover');
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(
     () => {
@@ -110,7 +94,7 @@ export function Dashboard() {
   const [activeRole, setActiveRole] = useState<
     "contributor" | "maintainer" | "admin"
   >("contributor");
-  const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
+  const [_isSearchModalOpen, _setIsSearchModalOpen] = useState(false);
   // Initialize viewing user from URL so profile page gets correct user on first render (avoids race with own profile fetch)
   const [viewingUserId, setViewingUserId] = useState<string | null>(() => {
     if (typeof window === "undefined") return null;
@@ -169,7 +153,7 @@ export function Dashboard() {
   const [adminAuthenticated, setAdminAuthenticated] = useState(() => {
     return sessionStorage.getItem("admin_authenticated") === "true";
   });
-  const [pendingAdminTarget, setPendingAdminTarget] = useState<
+  const [_pendingAdminTarget, setPendingAdminTarget] = useState<
     "nav" | "role" | null
   >(null);
 
@@ -240,14 +224,6 @@ export function Dashboard() {
   }, [currentPage, selectedProjectId, selectedIssue, viewingUserId, viewingUserLogin]);
 
   // Example tab list
-  const tabs = [
-    "discover",
-    "browse",
-    "open-source-week",
-    "ecosystems",
-    "contributors",
-    "settings",
-  ];
 
   // Keyboard shortcut for search (Cmd+K / Ctrl+K)
   useEffect(() => {
@@ -280,26 +256,12 @@ export function Dashboard() {
     }
   };
 
-  const handleLogout = () => {
-    logout();
-    setAdminAuthenticated(false);
-    sessionStorage.removeItem("admin_authenticated");
-    navigate("/");
-  };
 
   const openAdminAuthModal = (target: "nav" | "role") => {
     setPendingAdminTarget(target);
     setShowAdminPasswordModal(true);
   };
 
-  const handleAdminClick = () => {
-    if (adminAuthenticated) {
-      setActiveRole("admin");
-      handleNavigation("admin");
-      return;
-    }
-    openAdminAuthModal("nav");
-  };
 
   const handleAdminPasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -913,7 +875,7 @@ export function Dashboard() {
                       setProjectBackTarget("discover");
                       setCurrentPage("discover");
                     }}
-                    onContributorClick={(id) => {
+                    onContributorClick={() => {
                       // Navigate to profile page or contributors page with selected contributor
                       setCurrentPage("contributors");
                     }}
