@@ -1,12 +1,59 @@
 import { logger } from '../../../shared/utils/logger';
-import { useState, useEffect, useRef } from 'react';
-import { Search, Award, GitPullRequest, FolderGit2, Trophy, Github, Code, Globe, Sparkles, Star, Users, GitFork, DollarSign, GitMerge, Calendar, ChevronRight, Circle, Eye, Crown, Link, ArrowLeft, Medal, Shield, LucideIcon } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { Search, Award, GitPullRequest, FolderGit2, Trophy, Github, Code, Globe, Sparkles, Star, Users, GitFork, DollarSign, GitMerge, Calendar, ChevronRight, Circle, Eye, Crown, Link, ArrowLeft, Medal, Shield, AlertCircle, RefreshCw, LucideIcon } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { useTheme } from '../../../shared/contexts/ThemeContext';
 import { useAuth } from '../../../shared/contexts/AuthContext';
 import { getUserProfile, getProjectsContributed, getProjectsLed, getProfileCalendar, getProfileActivity, getPublicProfile } from '../../../shared/api/client';
 import { SkeletonLoader } from '../../../shared/components/SkeletonLoader';
 import { LanguageIcon } from '../../../shared/components/LanguageIcon';
+
+/**
+ * Inline error panel with a retry affordance, rendered when a profile section's
+ * API call (activity or contributed projects) fails.
+ *
+ * @remarks
+ * Kept visually consistent with each section's empty state and theme-aware.
+ * Exposes `role="alert"` so assistive tech announces the failure, and renders no
+ * user data — safe for the public-profile (other user) view.
+ *
+ * @param theme - Active UI theme (`'dark'` or `'light'`).
+ * @param message - Short, section-specific failure headline.
+ * @param onRetry - Handler that re-invokes the failed fetch for the current view.
+ * @param className - Optional extra classes (e.g. grid column spans).
+ */
+function SectionError({
+  theme,
+  message,
+  onRetry,
+  className = '',
+}: {
+  theme: string;
+  message: string;
+  onRetry: () => void;
+  className?: string;
+}) {
+  return (
+    <div
+      role="alert"
+      className={`text-center py-8 ${className} ${theme === 'dark' ? 'text-[#d4d4d4]' : 'text-[#7a6b5a]'}`}
+    >
+      <AlertCircle className={`w-12 h-12 mx-auto mb-3 ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`} />
+      <p className="text-[14px] font-medium mb-1">{message}</p>
+      <p className={`text-[12px] mb-4 ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
+        Something went wrong while loading this section.
+      </p>
+      <button
+        type="button"
+        onClick={onRetry}
+        className="inline-flex items-center gap-2 px-4 py-2 rounded-[12px] bg-gradient-to-br from-[#c9983a]/30 to-[#d4af37]/20 border-2 border-[#c9983a]/50 text-[#c9983a] text-[13px] font-semibold hover:scale-105 hover:shadow-[0_4px_12px_rgba(201,152,58,0.4)] transition-all duration-300"
+      >
+        <RefreshCw className="w-4 h-4" />
+        Retry
+      </button>
+    </div>
+  );
+}
 
 interface ProfileData {
   contributions_count: number;
@@ -76,6 +123,10 @@ export function ProfilePage({ viewingUserId, viewingUserLogin, onBack, onProject
   const [isLoadingProjects, setIsLoadingProjects] = useState(true);
   const [isLoadingCalendar, setIsLoadingCalendar] = useState(true);
   const [isLoadingActivity, setIsLoadingActivity] = useState(true);
+  // Error flags for the API-backed activity/contributions sections, used to show
+  // a retry affordance instead of a misleading empty state when a request fails.
+  const [projectsError, setProjectsError] = useState(false);
+  const [activityError, setActivityError] = useState(false);
   const [_selectedMonth, _setSelectedMonth] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedMonths, setExpandedMonths] = useState<{ [key: string]: boolean }>({});
@@ -132,36 +183,52 @@ export function ProfilePage({ viewingUserId, viewingUserLogin, onBack, onProject
     fetchProfile();
   }, [viewingUserId, viewingUserLogin]);
 
+  /**
+   * Fetch the contributed-projects list for the currently viewed user (or self).
+   *
+   * @remarks
+   * State handling: shows the skeleton and clears any prior error while the
+   * request is in flight; on failure it sets {@link projectsError} so the section
+   * renders a retry button rather than a misleading "no projects" empty state.
+   * Stale responses (the viewed user changed mid-request) are dropped via
+   * {@link isSameView}. Reads the current view from `viewingRef`, so the same
+   * function serves both the initial load and the retry button for own and
+   * public-profile views alike.
+   */
+  const fetchProjects = useCallback(async () => {
+    const { viewingUserId: requestedUserId, viewingUserLogin: requestedLogin } = viewingRef.current;
+    setIsLoadingProjects(true);
+    setProjectsError(false);
+    try {
+      const data = await getProjectsContributed(requestedUserId || undefined, requestedLogin || undefined);
+      if (!isSameView(requestedUserId, requestedLogin)) return;
+      const contributedProjects = data.map((p: any) => ({
+        id: p.id,
+        github_full_name: p.github_full_name,
+        status: p.status,
+        ecosystem_name: p.ecosystem_name,
+        language: p.language,
+        owner_avatar_url: p.owner_avatar_url,
+        stars_count: 0,
+        forks_count: 0,
+        contributors_count: 0,
+      }));
+      setProjects(contributedProjects);
+    } catch (error) {
+      if (isSameView(requestedUserId, requestedLogin)) {
+        logger.error('Failed to fetch projects:', error);
+        setProjectsError(true);
+      }
+    } finally {
+      if (isSameView(requestedUserId, requestedLogin)) setIsLoadingProjects(false);
+    }
+  }, []);
+
   // Fetch user's contributed projects (for viewed user or self)
   useEffect(() => {
-    const requestedUserId = viewingUserId;
-    const requestedLogin = viewingUserLogin;
-    if (requestedUserId || requestedLogin) setProjects([]);
-    const fetchProjects = async () => {
-      setIsLoadingProjects(true);
-      try {
-        const data = await getProjectsContributed(requestedUserId || undefined, requestedLogin || undefined);
-        if (!isSameView(requestedUserId, requestedLogin)) return;
-        const contributedProjects = data.map((p: any) => ({
-          id: p.id,
-          github_full_name: p.github_full_name,
-          status: p.status,
-          ecosystem_name: p.ecosystem_name,
-          language: p.language,
-          owner_avatar_url: p.owner_avatar_url,
-          stars_count: 0,
-          forks_count: 0,
-          contributors_count: 0,
-        }));
-        setProjects(contributedProjects);
-      } catch (error) {
-        if (isSameView(requestedUserId, requestedLogin)) logger.error('Failed to fetch projects:', error);
-      } finally {
-        if (isSameView(requestedUserId, requestedLogin)) setIsLoadingProjects(false);
-      }
-    };
+    if (viewingUserId || viewingUserLogin) setProjects([]);
     fetchProjects();
-  }, [viewingUserId, viewingUserLogin]);
+  }, [viewingUserId, viewingUserLogin, fetchProjects]);
 
   // Fetch projects led (for viewed user or self)
   useEffect(() => {
@@ -213,34 +280,48 @@ export function ProfilePage({ viewingUserId, viewingUserLogin, onBack, onProject
     fetchCalendar();
   }, [viewingUserId, viewingUserLogin]);
 
-  // Fetch contribution activity
-  useEffect(() => {
-    const requestedUserId = viewingUserId;
-    const requestedLogin = viewingUserLogin;
-    if (requestedUserId || requestedLogin) setContributionActivity([]);
-    const fetchActivity = async () => {
-      setIsLoadingActivity(true);
-      try {
-        const data = await getProfileActivity(100, 0, requestedUserId || undefined, requestedLogin || undefined);
-        if (!isSameView(requestedUserId, requestedLogin)) return;
-        setContributionActivity(data.activities || []);
-        const monthsSet = new Set<string>();
-        data.activities?.forEach((activity: any) => {
-          if (activity.month_year) monthsSet.add(activity.month_year);
-        });
-        const monthsObj: { [key: string]: boolean } = {};
-        Array.from(monthsSet).forEach((month, idx) => {
-          monthsObj[month] = idx === 0;
-        });
-        setExpandedMonths(monthsObj);
-      } catch (error) {
-        if (isSameView(requestedUserId, requestedLogin)) logger.error('Failed to fetch activity:', error);
-      } finally {
-        if (isSameView(requestedUserId, requestedLogin)) setIsLoadingActivity(false);
+  /**
+   * Fetch contribution activity for the currently viewed user (or self).
+   *
+   * @remarks
+   * State handling mirrors {@link fetchProjects}: skeleton while loading, an
+   * explicit {@link activityError} flag on failure (so the section shows a retry
+   * button instead of the "No contributions yet" empty state), and stale-response
+   * guarding via {@link isSameView}. Memoised so the retry button can re-invoke
+   * it; reads the current view from `viewingRef`.
+   */
+  const fetchActivity = useCallback(async () => {
+    const { viewingUserId: requestedUserId, viewingUserLogin: requestedLogin } = viewingRef.current;
+    setIsLoadingActivity(true);
+    setActivityError(false);
+    try {
+      const data = await getProfileActivity(100, 0, requestedUserId || undefined, requestedLogin || undefined);
+      if (!isSameView(requestedUserId, requestedLogin)) return;
+      setContributionActivity(data.activities || []);
+      const monthsSet = new Set<string>();
+      data.activities?.forEach((activity: any) => {
+        if (activity.month_year) monthsSet.add(activity.month_year);
+      });
+      const monthsObj: { [key: string]: boolean } = {};
+      Array.from(monthsSet).forEach((month, idx) => {
+        monthsObj[month] = idx === 0;
+      });
+      setExpandedMonths(monthsObj);
+    } catch (error) {
+      if (isSameView(requestedUserId, requestedLogin)) {
+        logger.error('Failed to fetch activity:', error);
+        setActivityError(true);
       }
-    };
+    } finally {
+      if (isSameView(requestedUserId, requestedLogin)) setIsLoadingActivity(false);
+    }
+  }, []);
+
+  // Fetch contribution activity (for viewed user or self)
+  useEffect(() => {
+    if (viewingUserId || viewingUserLogin) setContributionActivity([]);
     fetchActivity();
-  }, [viewingUserId, viewingUserLogin]);
+  }, [viewingUserId, viewingUserLogin, fetchActivity]);
 
   const toggleMonth = (month: string) => {
     setExpandedMonths(prev => ({
@@ -904,6 +985,13 @@ export function ProfilePage({ viewingUserId, viewingUserLogin, onBack, onProject
                 </div>
               </div>
             ))
+          ) : projectsError ? (
+            <SectionError
+              theme={theme}
+              message="Couldn't load projects"
+              onRetry={fetchProjects}
+              className="col-span-3"
+            />
           ) : (showAllProjects ? projects : projects.slice(0, 3)).length > 0 ? (
             (showAllProjects ? projects : projects.slice(0, 3)).map((project, idx) => {
               const projectName = project.github_full_name.split('/')[1] || project.github_full_name;
@@ -1421,6 +1509,13 @@ export function ProfilePage({ viewingUserId, viewingUserLogin, onBack, onProject
               </div>
             ))}
           </div>
+        ) : activityError ? (
+          <SectionError
+            theme={theme}
+            message="Couldn't load activity"
+            onRetry={fetchActivity}
+            className="py-12"
+          />
         ) : Object.keys(contributionsByMonth).length === 0 ? (
           <div className={`text-center py-12 ${theme === 'dark' ? 'text-[#d4d4d4]' : 'text-[#7a6b5a]'}`}>
             <Calendar className="w-16 h-16 mx-auto mb-4 opacity-50" />
