@@ -200,9 +200,7 @@ export function EcosystemDetailPage({ ecosystemId, ecosystemName, initialDescrip
     keyAreas: hasDetail ? apiKeyAreas : [],
     technologies: hasDetail && apiTechnologies.length > 0
       ? apiTechnologies
-      : hasDetail
-        ? []
-        : ['TypeScript for smart contract development and tooling', 'Rust for high-performance blockchain infrastructure', 'Solidity for Ethereum smart contracts', 'JavaScript/TypeScript for dApp frontends'],
+      : [],
   };
 
   const filteredProjects = ecosystemProjects.filter(
