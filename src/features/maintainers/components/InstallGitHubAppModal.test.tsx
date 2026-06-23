@@ -22,7 +22,7 @@ vi.mock('sonner', () => ({
 
 // Mock fetch globally
 const mockFetch = vi.fn();
-global.fetch = mockFetch;
+globalThis.fetch = mockFetch;
 
 describe('InstallGitHubAppModal', () => {
   const mockOnClose = vi.fn();
@@ -40,7 +40,7 @@ describe('InstallGitHubAppModal', () => {
   });
 
   afterEach(() => {
-    window.location = originalLocation;
+    window.location = originalLocation as any;
   });
 
   it('does not render when isOpen is false', () => {
