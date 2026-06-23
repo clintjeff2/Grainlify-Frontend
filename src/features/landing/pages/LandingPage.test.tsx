@@ -39,6 +39,12 @@ vi.mock("react-theme-switch-animation", () => ({
   }),
 }));
 
+vi.mock("react-intl", () => ({
+  IntlProvider: ({ children }: { children: React.ReactNode }) => children,
+  FormattedMessage: ({ id }: { id: string }) => id,
+  useIntl: () => ({ locale: "en", formatMessage: ({ id }: { id: string }) => id }),
+}));
+
 // ---------------------------------------------------------------------------
 // Helper
 // ---------------------------------------------------------------------------

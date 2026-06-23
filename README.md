@@ -1,5 +1,7 @@
 # Grainlify
 
+[![CI](https://github.com/Phantomcall/Grainlify-Frontend/actions/workflows/ci.yml/badge.svg)](https://github.com/Phantomcall/Grainlify-Frontend/actions/workflows/ci.yml)
+
 **Grainlify** is an open-source contribution platform that connects contributors with maintainers through GitHub OAuth authentication. The platform enables developers to discover projects, track contributions, manage open-source work, and participate in ecosystem-driven initiatives.
 
 ## Features

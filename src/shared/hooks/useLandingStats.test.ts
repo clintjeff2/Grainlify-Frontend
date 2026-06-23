@@ -10,6 +10,10 @@ vi.mock('../api/client', () => ({
   getLandingStats: (...args: unknown[]) => mockGetLandingStats(...args),
 }));
 
+vi.mock('../i18n', () => ({
+  useTranslation: () => ({ locale: 'en', t: (id: string) => id }),
+}));
+
 const PAYLOAD: LandingStats = {
   active_projects: 42,
   contributors: 1_500,
