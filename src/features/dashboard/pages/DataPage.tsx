@@ -1,32 +1,87 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { ChevronDown, Info } from 'lucide-react';
 import { Bar, Line as RechartsLine, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ComposedChart } from 'recharts';
 import { ComposableMap, Geographies, Geography, Marker, ZoomableGroup, Line as MapLine } from "react-simple-maps";
 import { useTheme } from '../../../shared/contexts/ThemeContext';
 
+/** Maps filter keys to their data field name and bar colour. */
+const FILTER_META: Record<string, { dataKey: string; color: string }> = {
+  new:          { dataKey: 'new',          color: '#c9983a' },
+  reactivated:  { dataKey: 'reactivated',  color: '#d4af37' },
+  active:       { dataKey: 'active',        color: '#b8860b' },
+  churned:      { dataKey: 'churned',       color: '#ff6b6b' },
+  prMerged:     { dataKey: 'prMerged',      color: '#8b6914' },
+};
+
+const GEO_URL = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json";
+
+const COUNTRY_COORDINATES: Record<string, [number, number]> = {
+  'United Kingdom': [-3.435973, 55.378051],
+  'Germany': [10.451526, 51.165691],
+  'Canada': [-106.346771, 56.130366],
+  'India': [78.96288, 20.593684],
+  'Brazil': [-51.92528, -14.235004],
+  'Netherlands': [5.291266, 52.132633],
+  'Australia': [133.775136, -25.274398],
+  'Spain': [-3.74922, 40.463667],
+  'Italy': [12.56738, 41.87194],
+  'Poland': [19.145136, 51.919438],
+  'Sweden': [18.643501, 60.128161],
+  'Japan': [138.252924, 36.204824],
+  'China': [104.195397, 35.86166],
+};
+
+const PROJECT_ACTIVITY_DATA = [
+  { month: 'January', value: 45, trend: 40, new: 12, reactivated: 5, active: 28, churned: -8, prMerged: 18, rewarded: 15420 },
+  { month: 'February', value: 38, trend: 42, new: 8, reactivated: 4, active: 26, churned: -6, prMerged: 14, rewarded: 12300 },
+  { month: 'March', value: 52, trend: 45, new: 15, reactivated: 7, active: 30, churned: -5, prMerged: 22, rewarded: 18650 },
+  { month: 'April', value: 48, trend: 50, new: 11, reactivated: 6, active: 31, churned: -7, prMerged: 19, rewarded: 16800 },
+  { month: 'May', value: 58, trend: 52, new: 18, reactivated: 8, active: 32, churned: -4, prMerged: 25, rewarded: 22100 },
+  { month: 'June', value: 55, trend: 55, new: 14, reactivated: 6, active: 35, churned: -9, prMerged: 21, rewarded: 20500 },
+  { month: 'July', value: 42, trend: 54, new: 9, reactivated: 5, active: 28, churned: -10, prMerged: 16, rewarded: 14200 },
+  { month: 'August', value: 48, trend: 50, new: 12, reactivated: 7, active: 29, churned: -6, prMerged: 20, rewarded: 17300 },
+  { month: 'September', value: 62, trend: 52, new: 20, reactivated: 9, active: 33, churned: -5, prMerged: 28, rewarded: 24800 },
+  { month: 'October', value: 58, trend: 58, new: 16, reactivated: 8, active: 34, churned: -7, prMerged: 24, rewarded: 21900 },
+  { month: 'November', value: 45, trend: 56, new: 10, reactivated: 6, active: 29, churned: -8, prMerged: 17, rewarded: 15600 },
+  { month: 'December', value: 52, trend: 52, new: 13, reactivated: 7, active: 32, churned: -10, prMerged: 20, rewarded: 18900 },
+];
+
+const CONTRIBUTOR_ACTIVITY_DATA = [
+  { month: 'January', value: 42, trend: 38, new: 10, reactivated: 4, active: 28, churned: -6, prMerged: 15, rewarded: 14200 },
+  { month: 'February', value: 35, trend: 40, new: 7, reactivated: 3, active: 25, churned: -5, prMerged: 12, rewarded: 11800 },
+  { month: 'March', value: 48, trend: 42, new: 13, reactivated: 6, active: 29, churned: -4, prMerged: 20, rewarded: 16900 },
+  { month: 'April', value: 45, trend: 46, new: 11, reactivated: 5, active: 29, churned: -6, prMerged: 17, rewarded: 15300 },
+  { month: 'May', value: 38, trend: 44, new: 8, reactivated: 4, active: 26, churned: -7, prMerged: 14, rewarded: 12700 },
+  { month: 'June', value: 52, trend: 45, new: 15, reactivated: 7, active: 30, churned: -5, prMerged: 19, rewarded: 19100 },
+  { month: 'July', value: 48, trend: 48, new: 12, reactivated: 6, active: 30, churned: -8, prMerged: 18, rewarded: 17400 },
+  { month: 'August', value: 55, trend: 50, new: 17, reactivated: 8, active: 30, churned: -4, prMerged: 23, rewarded: 21300 },
+  { month: 'September', value: 50, trend: 52, new: 14, reactivated: 7, active: 29, churned: -6, prMerged: 16, rewarded: 18600 },
+  { month: 'October', value: 58, trend: 54, new: 19, reactivated: 9, active: 30, churned: -5, prMerged: 25, rewarded: 23800 },
+  { month: 'November', value: 52, trend: 56, new: 15, reactivated: 7, active: 30, churned: -7, prMerged: 20, rewarded: 19500 },
+  { month: 'December', value: 48, trend: 52, new: 12, reactivated: 6, active: 30, churned: -8, prMerged: 18, rewarded: 17200 },
+];
+
+const CONTRIBUTORS_BY_REGION = [
+  { name: 'United Kingdom', value: 625, percentage: 45 },
+  { name: 'Germany', value: 720, percentage: 52 },
+  { name: 'Canada', value: 580, percentage: 42 },
+  { name: 'India', value: 560, percentage: 40 },
+  { name: 'Brazil', value: 490, percentage: 35 },
+  { name: 'Netherlands', value: 300, percentage: 22 },
+  { name: 'Australia', value: 430, percentage: 31 },
+  { name: 'Spain', value: 280, percentage: 20 },
+  { name: 'Italy', value: 220, percentage: 16 },
+  { name: 'Poland', value: 280, percentage: 20 },
+  { name: 'Sweden', value: 210, percentage: 15 },
+  { name: 'Japan', value: 240, percentage: 17 },
+  { name: 'China', value: 220, percentage: 16 },
+];
+
 export function DataPage() {
   const { theme } = useTheme();
   const [mapZoom, setMapZoom] = useState(1);
   const [mapCenter, setMapCenter] = useState<[number, number]>([0, 0]);
-
-  const geoUrl = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json";
-
-  const countryCoordinates: Record<string, [number, number]> = {
-    'United Kingdom': [-3.435973, 55.378051],
-    'Germany': [10.451526, 51.165691],
-    'Canada': [-106.346771, 56.130366],
-    'India': [78.96288, 20.593684],
-    'Brazil': [-51.92528, -14.235004],
-    'Netherlands': [5.291266, 52.132633],
-    'Australia': [133.775136, -25.274398],
-    'Spain': [-3.74922, 40.463667],
-    'Italy': [12.56738, 41.87194],
-    'Poland': [19.145136, 51.919438],
-    'Sweden': [18.643501, 60.128161],
-    'Japan': [138.252924, 36.204824],
-    'China': [104.195397, 35.86166],
-  };
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'projects' | 'contributions'>('overview');
   const [projectInterval, setProjectInterval] = useState('Monthly interval');
   const [contributorInterval, setContributorInterval] = useState('Monthly interval');
   const [showProjectIntervalDropdown, setShowProjectIntervalDropdown] = useState(false);
@@ -46,55 +101,6 @@ export function DataPage() {
     prMerged: false,
   });
 
-  // Sample data for project activity (monthly data)
-  const projectActivityData = [
-    { month: 'January', value: 45, trend: 40, new: 12, reactivated: 5, active: 28, churned: -8, rewarded: 15420 },
-    { month: 'February', value: 38, trend: 42, new: 8, reactivated: 4, active: 26, churned: -6, rewarded: 12300 },
-    { month: 'March', value: 52, trend: 45, new: 15, reactivated: 7, active: 30, churned: -5, rewarded: 18650 },
-    { month: 'April', value: 48, trend: 50, new: 11, reactivated: 6, active: 31, churned: -7, rewarded: 16800 },
-    { month: 'May', value: 58, trend: 52, new: 18, reactivated: 8, active: 32, churned: -4, rewarded: 22100 },
-    { month: 'June', value: 55, trend: 55, new: 14, reactivated: 6, active: 35, churned: -9, rewarded: 20500 },
-    { month: 'July', value: 42, trend: 54, new: 9, reactivated: 5, active: 28, churned: -10, rewarded: 14200 },
-    { month: 'August', value: 48, trend: 50, new: 12, reactivated: 7, active: 29, churned: -6, rewarded: 17300 },
-    { month: 'September', value: 62, trend: 52, new: 20, reactivated: 9, active: 33, churned: -5, rewarded: 24800 },
-    { month: 'October', value: 58, trend: 58, new: 16, reactivated: 8, active: 34, churned: -7, rewarded: 21900 },
-    { month: 'November', value: 45, trend: 56, new: 10, reactivated: 6, active: 29, churned: -8, rewarded: 15600 },
-    { month: 'December', value: 52, trend: 52, new: 13, reactivated: 7, active: 32, churned: -10, rewarded: 18900 },
-  ];
-
-  // Sample data for contributor activity
-  const contributorActivityData = [
-    { month: 'January', value: 42, trend: 38, new: 10, reactivated: 4, active: 28, churned: -6, rewarded: 14200 },
-    { month: 'February', value: 35, trend: 40, new: 7, reactivated: 3, active: 25, churned: -5, rewarded: 11800 },
-    { month: 'March', value: 48, trend: 42, new: 13, reactivated: 6, active: 29, churned: -4, rewarded: 16900 },
-    { month: 'April', value: 45, trend: 46, new: 11, reactivated: 5, active: 29, churned: -6, rewarded: 15300 },
-    { month: 'May', value: 38, trend: 44, new: 8, reactivated: 4, active: 26, churned: -7, rewarded: 12700 },
-    { month: 'June', value: 52, trend: 45, new: 15, reactivated: 7, active: 30, churned: -5, rewarded: 19100 },
-    { month: 'July', value: 48, trend: 48, new: 12, reactivated: 6, active: 30, churned: -8, rewarded: 17400 },
-    { month: 'August', value: 55, trend: 50, new: 17, reactivated: 8, active: 30, churned: -4, rewarded: 21300 },
-    { month: 'September', value: 50, trend: 52, new: 14, reactivated: 7, active: 29, churned: -6, rewarded: 18600 },
-    { month: 'October', value: 58, trend: 54, new: 19, reactivated: 9, active: 30, churned: -5, rewarded: 23800 },
-    { month: 'November', value: 52, trend: 56, new: 15, reactivated: 7, active: 30, churned: -7, rewarded: 19500 },
-    { month: 'December', value: 48, trend: 52, new: 12, reactivated: 6, active: 30, churned: -8, rewarded: 17200 },
-  ];
-
-  // Contributors by country/region
-  const contributorsByRegion = [
-    { name: 'United Kingdom', value: 625, percentage: 45 },
-    { name: 'Germany', value: 720, percentage: 52 },
-    { name: 'Canada', value: 580, percentage: 42 },
-    { name: 'India', value: 560, percentage: 40 },
-    { name: 'Brazil', value: 490, percentage: 35 },
-    { name: 'Netherlands', value: 300, percentage: 22 },
-    { name: 'Australia', value: 430, percentage: 31 },
-    { name: 'Spain', value: 280, percentage: 20 },
-    { name: 'Italy', value: 220, percentage: 16 },
-    { name: 'Poland', value: 280, percentage: 20 },
-    { name: 'Sweden', value: 210, percentage: 15 },
-    { name: 'Japan', value: 240, percentage: 17 },
-    { name: 'China', value: 220, percentage: 16 },
-  ];
-
   const toggleProjectFilter = (filter: keyof typeof projectFilters) => {
     setProjectFilters(prev => ({ ...prev, [filter]: !prev[filter] }));
   };
@@ -102,6 +108,39 @@ export function DataPage() {
   const toggleContributorFilter = (filter: keyof typeof contributorFilters) => {
     setContributorFilters(prev => ({ ...prev, [filter]: !prev[filter] }));
   };
+
+
+  const activeProjectFilterKeys = Object.keys(projectFilters).filter(
+    k => projectFilters[k as keyof typeof projectFilters],
+  );
+  const activeContributorFilterKeys = Object.keys(contributorFilters).filter(
+    k => contributorFilters[k as keyof typeof contributorFilters],
+  );
+
+  const filteredProjectData = useMemo(() => {
+    if (activeProjectFilterKeys.length === 0) return PROJECT_ACTIVITY_DATA;
+    return PROJECT_ACTIVITY_DATA.map(d => {
+      const sum = activeProjectFilterKeys.reduce(
+        (acc, k) => acc + Math.abs(d[FILTER_META[k].dataKey as keyof typeof d] as number),
+        0,
+      );
+      return { ...d, value: sum };
+    });
+  }, [activeProjectFilterKeys]);
+
+  const filteredContributorData = useMemo(() => {
+    if (activeContributorFilterKeys.length === 0) return CONTRIBUTOR_ACTIVITY_DATA;
+    return CONTRIBUTOR_ACTIVITY_DATA.map(d => {
+      const sum = activeContributorFilterKeys.reduce(
+        (acc, k) => acc + Math.abs(d[FILTER_META[k].dataKey as keyof typeof d] as number),
+        0,
+      );
+      return { ...d, value: sum };
+    });
+  }, [activeContributorFilterKeys]);
+
+  const showProjects      = activeTab === 'overview' || activeTab === 'projects';
+  const showContributions = activeTab === 'overview' || activeTab === 'contributions';
 
   const CustomTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
@@ -160,8 +199,10 @@ export function DataPage() {
           ? 'bg-white/[0.12] border-white/20'
           : 'bg-white/[0.12] border-white/20'
         }`}>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2" role="tablist" aria-label="Data page views">
           <button
+            role="tab"
+            aria-selected={activeTab === 'overview'}
             onClick={() => setActiveTab('overview')}
             className={`px-6 py-3 rounded-[16px] font-bold text-[14px] transition-all duration-300 ${activeTab === 'overview'
                 ? `bg-gradient-to-br from-[#c9983a]/30 to-[#d4af37]/20 border-2 border-[#c9983a]/50 ${theme === 'dark' ? 'text-[#f5c563]' : 'text-[#2d2820]'
@@ -172,6 +213,8 @@ export function DataPage() {
             Overview
           </button>
           <button
+            role="tab"
+            aria-selected={activeTab === 'projects'}
             onClick={() => setActiveTab('projects')}
             className={`px-6 py-3 rounded-[16px] font-bold text-[14px] transition-all duration-300 ${activeTab === 'projects'
                 ? `bg-gradient-to-br from-[#c9983a]/30 to-[#d4af37]/20 border-2 border-[#c9983a]/50 ${theme === 'dark' ? 'text-[#f5c563]' : 'text-[#2d2820]'
@@ -182,6 +225,8 @@ export function DataPage() {
             Projects
           </button>
           <button
+            role="tab"
+            aria-selected={activeTab === 'contributions'}
             onClick={() => setActiveTab('contributions')}
             className={`px-6 py-3 rounded-[16px] font-bold text-[14px] transition-all duration-300 ${activeTab === 'contributions'
                 ? `bg-gradient-to-br from-[#c9983a]/30 to-[#d4af37]/20 border-2 border-[#c9983a]/50 ${theme === 'dark' ? 'text-[#f5c563]' : 'text-[#2d2820]'
@@ -195,7 +240,8 @@ export function DataPage() {
       </div>
 
       {/* Main Content Grid */}
-      <div className="grid grid-cols-2 gap-6">
+      {showProjects && (
+      <div className={`grid gap-6 ${showProjects && showContributions ? 'grid-cols-2' : 'grid-cols-1'}`}>
         {/* Left Column - Project Activity */}
         <div className="backdrop-blur-[40px] bg-white/[0.12] rounded-[24px] border border-white/20 p-8">
           <div className="flex items-center justify-between mb-6">
@@ -269,7 +315,7 @@ export function DataPage() {
           {/* Chart */}
           <div className="h-[280px] mb-6">
             <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={projectActivityData}>
+              <ComposedChart data={filteredProjectData}>
                 <defs>
                   <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="#c9983a" stopOpacity={0.8} />
@@ -287,12 +333,24 @@ export function DataPage() {
                 />
                 <YAxis stroke="#7a6b5a" tick={{ fill: '#7a6b5a', fontSize: 11, fontWeight: 600 }} />
                 <Tooltip content={<CustomTooltip />} />
-                <Bar
-                  dataKey="value"
-                  fill="url(#barGradient)"
-                  radius={[8, 8, 0, 0]}
-                  maxBarSize={40}
-                />
+                {activeProjectFilterKeys.length === 0 ? (
+                  <Bar
+                    dataKey="value"
+                    fill="url(#barGradient)"
+                    radius={[8, 8, 0, 0]}
+                    maxBarSize={40}
+                  />
+                ) : (
+                  activeProjectFilterKeys.map(k => (
+                    <Bar
+                      key={k}
+                      dataKey={FILTER_META[k].dataKey}
+                      fill={FILTER_META[k].color}
+                      radius={[8, 8, 0, 0]}
+                      maxBarSize={40}
+                    />
+                  ))
+                )}
                 <RechartsLine
                   type="monotone"
                   dataKey="trend"
@@ -308,6 +366,7 @@ export function DataPage() {
           <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={() => toggleProjectFilter('new')}
+              aria-pressed={projectFilters.new}
               className={`px-4 py-2 rounded-[10px] text-[13px] font-semibold transition-all ${projectFilters.new
                   ? 'bg-[#c9983a] text-white shadow-[0_3px_12px_rgba(201,152,58,0.3)]'
                   : 'backdrop-blur-[20px] bg-white/[0.15] border border-white/25 text-[#2d2820] hover:bg-white/[0.2]'
@@ -317,6 +376,7 @@ export function DataPage() {
             </button>
             <button
               onClick={() => toggleProjectFilter('reactivated')}
+              aria-pressed={projectFilters.reactivated}
               className={`px-4 py-2 rounded-[10px] text-[13px] font-semibold transition-all ${projectFilters.reactivated
                   ? 'bg-[#c9983a] text-white shadow-[0_3px_12px_rgba(201,152,58,0.3)]'
                   : 'backdrop-blur-[20px] bg-white/[0.15] border border-white/25 text-[#2d2820] hover:bg-white/[0.2]'
@@ -326,6 +386,7 @@ export function DataPage() {
             </button>
             <button
               onClick={() => toggleProjectFilter('active')}
+              aria-pressed={projectFilters.active}
               className={`px-4 py-2 rounded-[10px] text-[13px] font-semibold transition-all ${projectFilters.active
                   ? 'bg-[#c9983a] text-white shadow-[0_3px_12px_rgba(201,152,58,0.3)]'
                   : 'backdrop-blur-[20px] bg-white/[0.15] border border-white/25 text-[#2d2820] hover:bg-white/[0.2]'
@@ -335,6 +396,7 @@ export function DataPage() {
             </button>
             <button
               onClick={() => toggleProjectFilter('churned')}
+              aria-pressed={projectFilters.churned}
               className={`px-4 py-2 rounded-[10px] text-[13px] font-semibold transition-all ${projectFilters.churned
                   ? 'bg-[#c9983a] text-white shadow-[0_3px_12px_rgba(201,152,58,0.3)]'
                   : 'backdrop-blur-[20px] bg-white/[0.15] border border-white/25 text-[#2d2820] hover:bg-white/[0.2]'
@@ -344,6 +406,7 @@ export function DataPage() {
             </button>
             <button
               onClick={() => toggleProjectFilter('prMerged')}
+              aria-pressed={projectFilters.prMerged}
               className={`px-4 py-2 rounded-[10px] text-[13px] font-semibold transition-all ${projectFilters.prMerged
                   ? 'bg-[#c9983a] text-white shadow-[0_3px_12px_rgba(201,152,58,0.3)]'
                   : 'backdrop-blur-[20px] bg-white/[0.15] border border-white/25 text-[#2d2820] hover:bg-white/[0.2]'
@@ -404,11 +467,11 @@ export function DataPage() {
                     setMapZoom(zoom);
                   }}
                 >
-                  <Geographies geography={geoUrl}>
+                  <Geographies geography={GEO_URL}>
                     {({ geographies }: { geographies: unknown[] }) =>
                       // eslint-disable-next-line @typescript-eslint/no-explicit-any
                       geographies.map((geo: any) => {
-                        const isHighlighted = Object.keys(countryCoordinates).some(country =>
+                        const isHighlighted = Object.keys(COUNTRY_COORDINATES).some(country =>
                           geo.properties.name === country ||
                           (country === "United Kingdom" && geo.properties.name === "United Kingdom") || // Add aliases if needed
                           (country === "United States" && geo.properties.name === "United States of America")
@@ -432,8 +495,8 @@ export function DataPage() {
                   </Geographies>
 
                   {/* Markers */}
-                  {contributorsByRegion.map((region) => {
-                    const coords = countryCoordinates[region.name];
+                  {CONTRIBUTORS_BY_REGION.map((region) => {
+                    const coords = COUNTRY_COORDINATES[region.name];
                     if (!coords) return null;
                     return (
                       <Marker key={region.name} coordinates={coords}>
@@ -446,24 +509,24 @@ export function DataPage() {
 
                   {/* Simple Connection Lines for visual effect */}
                   <MapLine
-                    from={countryCoordinates['United Kingdom']}
-                    to={countryCoordinates['India']}
+                    from={COUNTRY_COORDINATES['United Kingdom']}
+                    to={COUNTRY_COORDINATES['India']}
                     stroke="#c9983a"
                     strokeWidth={0.5}
                     strokeDasharray="3,3"
                     className="opacity-30"
                   />
                   <MapLine
-                    from={countryCoordinates['Canada']}
-                    to={countryCoordinates['Germany']}
+                    from={COUNTRY_COORDINATES['Canada']}
+                    to={COUNTRY_COORDINATES['Germany']}
                     stroke="#d4af37"
                     strokeWidth={0.5}
                     strokeDasharray="3,3"
                     className="opacity-30"
                   />
                   <MapLine
-                    from={countryCoordinates['Brazil']}
-                    to={countryCoordinates['Spain']}
+                    from={COUNTRY_COORDINATES['Brazil']}
+                    to={COUNTRY_COORDINATES['Spain']}
                     stroke="#c9983a"
                     strokeWidth={0.5}
                     strokeDasharray="3,3"
@@ -493,7 +556,7 @@ export function DataPage() {
 
           {/* Country Bars */}
           <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
-            {contributorsByRegion.map((region) => (
+            {CONTRIBUTORS_BY_REGION.map((region) => (
               <div key={region.name} className="flex items-center gap-3 group">
                 <div className="flex-1">
                   <div className="flex items-center justify-between mb-1.5">
@@ -513,9 +576,11 @@ export function DataPage() {
           </div>
         </div>
       </div>
+      )}
 
       {/* Bottom Grid */}
-      <div className="grid grid-cols-2 gap-6">
+      {showContributions && (
+      <div className={`grid gap-6 ${showProjects && showContributions ? 'grid-cols-2' : 'grid-cols-1'}`}>
         {/* Contributor Activity */}
         <div className="backdrop-blur-[40px] bg-white/[0.12] rounded-[24px] border border-white/20 shadow-[0_8px_32px_rgba(0,0,0,0.08)] p-8">
           <div className="flex items-center justify-between mb-6">
@@ -589,7 +654,7 @@ export function DataPage() {
           {/* Chart */}
           <div className="h-[280px] mb-6">
             <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={contributorActivityData}>
+              <ComposedChart data={filteredContributorData}>
                 <defs>
                   <linearGradient id="contributorBarGradient" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="#c9983a" stopOpacity={0.8} />
@@ -607,12 +672,24 @@ export function DataPage() {
                 />
                 <YAxis stroke="#7a6b5a" tick={{ fill: '#7a6b5a', fontSize: 11, fontWeight: 600 }} />
                 <Tooltip content={<CustomTooltip />} />
-                <Bar
-                  dataKey="value"
-                  fill="url(#contributorBarGradient)"
-                  radius={[8, 8, 0, 0]}
-                  maxBarSize={40}
-                />
+                {activeContributorFilterKeys.length === 0 ? (
+                  <Bar
+                    dataKey="value"
+                    fill="url(#contributorBarGradient)"
+                    radius={[8, 8, 0, 0]}
+                    maxBarSize={40}
+                  />
+                ) : (
+                  activeContributorFilterKeys.map(k => (
+                    <Bar
+                      key={k}
+                      dataKey={FILTER_META[k].dataKey}
+                      fill={FILTER_META[k].color}
+                      radius={[8, 8, 0, 0]}
+                      maxBarSize={40}
+                    />
+                  ))
+                )}
                 <RechartsLine
                   type="monotone"
                   dataKey="trend"
@@ -628,6 +705,7 @@ export function DataPage() {
           <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={() => toggleContributorFilter('new')}
+              aria-pressed={contributorFilters.new}
               className={`px-4 py-2 rounded-[10px] text-[13px] font-semibold transition-all ${contributorFilters.new
                   ? 'bg-[#c9983a] text-white shadow-[0_3px_12px_rgba(201,152,58,0.3)]'
                   : 'backdrop-blur-[20px] bg-white/[0.15] border border-white/25 text-[#2d2820] hover:bg-white/[0.2]'
@@ -637,6 +715,7 @@ export function DataPage() {
             </button>
             <button
               onClick={() => toggleContributorFilter('reactivated')}
+              aria-pressed={contributorFilters.reactivated}
               className={`px-4 py-2 rounded-[10px] text-[13px] font-semibold transition-all ${contributorFilters.reactivated
                   ? 'bg-[#c9983a] text-white shadow-[0_3px_12px_rgba(201,152,58,0.3)]'
                   : 'backdrop-blur-[20px] bg-white/[0.15] border border-white/25 text-[#2d2820] hover:bg-white/[0.2]'
@@ -646,6 +725,7 @@ export function DataPage() {
             </button>
             <button
               onClick={() => toggleContributorFilter('active')}
+              aria-pressed={contributorFilters.active}
               className={`px-4 py-2 rounded-[10px] text-[13px] font-semibold transition-all ${contributorFilters.active
                   ? 'bg-[#c9983a] text-white shadow-[0_3px_12px_rgba(201,152,58,0.3)]'
                   : 'backdrop-blur-[20px] bg-white/[0.15] border border-white/25 text-[#2d2820] hover:bg-white/[0.2]'
@@ -655,6 +735,7 @@ export function DataPage() {
             </button>
             <button
               onClick={() => toggleContributorFilter('churned')}
+              aria-pressed={contributorFilters.churned}
               className={`px-4 py-2 rounded-[10px] text-[13px] font-semibold transition-all ${contributorFilters.churned
                   ? 'bg-[#c9983a] text-white shadow-[0_3px_12px_rgba(201,152,58,0.3)]'
                   : 'backdrop-blur-[20px] bg-white/[0.15] border border-white/25 text-[#2d2820] hover:bg-white/[0.2]'
@@ -664,6 +745,7 @@ export function DataPage() {
             </button>
             <button
               onClick={() => toggleContributorFilter('prMerged')}
+              aria-pressed={contributorFilters.prMerged}
               className={`px-4 py-2 rounded-[10px] text-[13px] font-semibold transition-all ${contributorFilters.prMerged
                   ? 'bg-[#c9983a] text-white shadow-[0_3px_12px_rgba(201,152,58,0.3)]'
                   : 'backdrop-blur-[20px] bg-white/[0.15] border border-white/25 text-[#2d2820] hover:bg-white/[0.2]'
@@ -726,6 +808,7 @@ export function DataPage() {
           </div>
         </div>
       </div>
+      )}
 
       <style>{`
         .custom-scrollbar::-webkit-scrollbar {
