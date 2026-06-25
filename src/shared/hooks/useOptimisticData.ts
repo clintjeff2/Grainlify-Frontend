@@ -1,8 +1,6 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { logger } from '../../shared/utils/logger'
 
-const MAX_RETRIES = 5
-
 /** Cache entry for optimistic data */
 interface CacheEntry<T> {
   data: T
@@ -17,6 +15,10 @@ interface UseOptimisticDataOptions<T> {
   cacheKey?: string
   /** Custom empty-state predicate for domain-specific data shapes */
   isEmpty?: (data: T) => boolean
+  /** Maximum number of retry attempts, default 5 */
+  maxRetries?: number
+  /** Base delay in ms for exponential backoff, default 1000 */
+  baseDelay?: number
 }
 
 /** Return type of the hook */
@@ -29,7 +31,7 @@ export interface UseOptimisticDataReturn<T> {
   hasError: boolean
   /** Raw error object (if any) */
   error: unknown
-  /** Retry the last fetch (max 5 attempts) */
+  /** Retry the last fetch with exponential backoff */
   retry: () => void
   /** Whether the data is empty */
   isEmpty: boolean
@@ -37,6 +39,10 @@ export interface UseOptimisticDataReturn<T> {
   fetchData: (fetchFn: (signal: AbortSignal) => Promise<T>, forceRefresh?: boolean) => Promise<void>
   /** Clear cached data */
   clearCache: () => void
+  /** Current retry attempt count */
+  retryCount: number
+  /** Whether a backoff-delayed retry is pending */
+  isRetrying: boolean
 }
 
 /**
@@ -72,27 +78,70 @@ function isAbortError(error: unknown): boolean {
 }
 
 /**
- * Optimistic data hook with caching, abort support, retry and empty‑state handling.
+ * Compute backoff delay with full jitter.
  *
- * @param initialData – The initial value displayed before any fetch.
- * @param options – Configuration of cache duration, cache key, and empty-state detection.
+ * @param attempt - Zero-based retry attempt index (0 = first retry).
+ * @param baseDelay - Base delay in ms.
+ * @returns Randomized delay between 0 and `baseDelay * 2^attempt`, capped at 30 s.
+ *
+ * @example
+ * ```ts
+ * // First retry: random delay in [0, 1000]
+ * // Second retry: random delay in [0, 2000]
+ * // Third retry: random delay in [0, 4000]
+ * const delay = computeBackoffDelay(0, 1000)
+ * ```
+ */
+function computeBackoffDelay(attempt: number, baseDelay: number): number {
+  const maxDelay = 30_000
+  const exponential = Math.min(baseDelay * Math.pow(2, attempt), maxDelay)
+  return Math.random() * exponential
+}
+
+/**
+ * Optimistic data hook with caching, abort support, exponential backoff retry and empty-state handling.
+ *
+ * @param initialData - The initial value displayed before any fetch.
+ * @param options - Configuration of cache duration, cache key, empty-state detection, retries and backoff.
+ *
+ * @example
+ * ```tsx
+ * const { data, isLoading, hasError, retry, retryCount, isRetrying, fetchData } =
+ *   useOptimisticData<User[]>([], { maxRetries: 3, baseDelay: 500 })
+ *
+ * useEffect(() => {
+ *   fetchData((signal) => api.getUsers(signal))
+ * }, [fetchData])
+ *
+ * if (isRetrying) return <p>Retrying (attempt {retryCount})...</p>
+ * ```
  */
 export function useOptimisticData<T>(
   initialData: T,
   options: UseOptimisticDataOptions<T> = {}
 ): UseOptimisticDataReturn<T> {
-  const { cacheDuration = 30000, cacheKey = 'default', isEmpty: isEmptyOption } = options
+  const {
+    cacheDuration = 30000,
+    cacheKey = 'default',
+    isEmpty: isEmptyOption,
+    maxRetries = 5,
+    baseDelay = 1000,
+  } = options
 
   const [data, setData] = useState<T>(initialData)
   const [isLoading, setIsLoading] = useState<boolean>(true)
   const [hasError, setHasError] = useState<boolean>(false)
   const [error, setError] = useState<unknown>(null)
+  const [retryCount, setRetryCount] = useState<number>(0)
+  const [isRetrying, setIsRetrying] = useState<boolean>(false)
 
   const cacheRef = useRef<Map<string, CacheEntry<T>>>(new Map())
   const abortControllerRef = useRef<AbortController | null>(null)
   const lastFetchFnRef = useRef<((signal: AbortSignal) => Promise<T>) | null>(null)
   const dataRef = useRef<T>(initialData)
   const retryCountRef = useRef<number>(0)
+  const isRetryCallRef = useRef<boolean>(false)
+  const backoffTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const emptyPredicate = isEmptyOption ?? defaultIsEmptyValue
   const emptyPredicateRef = useRef<(data: T) => boolean>(emptyPredicate)
 
@@ -109,20 +158,29 @@ export function useOptimisticData<T>(
     setData(nextData)
   }, [])
 
-  // Abort any in‑flight request when the component unmounts
+  const clearBackoffTimer = useCallback(() => {
+    if (backoffTimerRef.current !== null) {
+      clearTimeout(backoffTimerRef.current)
+      backoffTimerRef.current = null
+    }
+  }, [])
+
+  // Abort any in-flight request and clear timers when the component unmounts
   useEffect(() => {
     return () => {
       abortControllerRef.current?.abort()
+      clearBackoffTimer()
     }
-  }, [])
+  }, [clearBackoffTimer])
 
   const fetchData = useCallback(
     async (fetchFn: (signal: AbortSignal) => Promise<T>, forceRefresh = false) => {
       const now = Date.now()
       lastFetchFnRef.current = fetchFn
 
-      // Cancel any previous request
+      // Cancel any previous request and pending backoff
       abortControllerRef.current?.abort()
+      clearBackoffTimer()
       const controller = new AbortController()
       abortControllerRef.current = controller
       const signal = controller.signal
@@ -162,20 +220,41 @@ export function useOptimisticData<T>(
       } finally {
         if (!signal.aborted) {
           setIsLoading(false)
-          retryCountRef.current = 0
+          if (!isRetryCallRef.current) {
+            retryCountRef.current = 0
+            setRetryCount(0)
+          }
+          setIsRetrying(false)
+          isRetryCallRef.current = false
         }
       }
     },
-    [cacheDuration, cacheKey, updateData]
+    [cacheDuration, cacheKey, updateData, clearBackoffTimer]
   )
 
   const retry = useCallback(() => {
     const latestFetchFn = lastFetchFnRef.current
-    if (retryCountRef.current < MAX_RETRIES && latestFetchFn) {
-      retryCountRef.current += 1
+    if (retryCountRef.current >= maxRetries || !latestFetchFn) return
+
+    retryCountRef.current += 1
+    const currentAttempt = retryCountRef.current
+    setRetryCount(currentAttempt)
+    setIsRetrying(true)
+
+    const delay = computeBackoffDelay(currentAttempt - 1, baseDelay)
+
+    clearBackoffTimer()
+    backoffTimerRef.current = setTimeout(() => {
+      backoffTimerRef.current = null
+      // If the controller was aborted while waiting, do not retry
+      if (abortControllerRef.current?.signal.aborted) {
+        setIsRetrying(false)
+        return
+      }
+      isRetryCallRef.current = true
       void fetchData(latestFetchFn, true)
-    }
-  }, [fetchData])
+    }, delay)
+  }, [fetchData, maxRetries, baseDelay, clearBackoffTimer])
 
   const clearCache = useCallback(() => {
     cacheRef.current.clear()
@@ -185,5 +264,5 @@ export function useOptimisticData<T>(
     return emptyPredicate(data)
   }, [data, emptyPredicate])
 
-  return { data, isLoading, hasError, error, retry, isEmpty, fetchData, clearCache }
+  return { data, isLoading, hasError, error, retry, isEmpty, fetchData, clearCache, retryCount, isRetrying }
 }

@@ -108,6 +108,37 @@ describe('ScrollToTop', () => {
     expect(bodySpy).toHaveBeenCalledWith({ preventScroll: true });
   });
 
+  it('falls back to #skip-target when #main is absent', async() => {
+    const navRef: { navigate?: (path: string) => void} = {};
+    function Harness(){
+      navRef.navigate = useNavigate();
+      return null;
+    }
+
+    render(
+      <MemoryRouter initialEntries={['/a']}>
+        <ScrollToTop />
+        <a id='skip-target' tabIndex={-1} /> 
+        <Routes>
+          <Route path='*' element={<Harness/>}/>
+        </Routes>
+      </MemoryRouter>
+    );
+
+    const skipTarget = document.getElementById('skip-target') as HTMLElement;
+    const skipSpy = vi.spyOn(skipTarget, 'focus');
+    
+    const bodySpy = vi.spyOn(document.body, 'focus');
+    bodySpy.mockClear();
+
+    await act(() => { navRef.navigate!('/b'); });
+
+    expect(skipSpy).toHaveBeenCalledWith({ preventScroll: true });
+    expect(bodySpy).not.toHaveBeenCalled();
+    
+    bodySpy.mockRestore(); 
+  });
+
   it('scrolls again on a subsequent route change', async () => {
     const { navigate } = setup('/a');
     await navigate('/b');

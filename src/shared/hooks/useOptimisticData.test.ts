@@ -307,9 +307,538 @@ describe('useOptimisticData', () => {
     expect(result.current.hasError).toBe(false)
   })
 
-  it('retries with the latest fetch function', async () => {
-    const { result } = renderHook(() => useOptimisticData('initial'))
+  it('keeps fetchData stable after data changes and non-memoized initial data rerenders', async () => {
+    const { result, rerender } = renderHook(({ seed }) => useOptimisticData({ value: seed }), {
+      initialProps: { seed: 'initial' },
+    })
+    const firstFetchData = result.current.fetchData
+
+    await act(async () => {
+      await result.current.fetchData(vi.fn().mockResolvedValue({ value: 'loaded' }))
+    })
+
+    rerender({ seed: 'new-inline-object' })
+
+    expect(result.current.data).toEqual({ value: 'loaded' })
+    expect(result.current.fetchData).toBe(firstFetchData)
+  })
+
+  // ─── Exponential Backoff Tests ────────────────────────────────────────────────
+
+  describe('exponential backoff', () => {
+    it('retries with a delay instead of immediately', async () => {
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const { result } = renderHook(() =>
+        useOptimisticData('initial', { baseDelay: 1000 })
+      )
+
+      const fetchFn = vi.fn().mockRejectedValue(new Error('fail'))
+
+      await act(async () => {
+        await result.current.fetchData(fetchFn)
+      })
+
+      expect(result.current.hasError).toBe(true)
+      expect(fetchFn).toHaveBeenCalledTimes(1)
+
+      // Trigger retry — should NOT call immediately
+      act(() => {
+        result.current.retry()
+      })
+
+      expect(result.current.isRetrying).toBe(true)
+      expect(result.current.retryCount).toBe(1)
+      expect(fetchFn).toHaveBeenCalledTimes(1) // not yet called
+
+      // Advance past max possible delay for first retry (baseDelay * 2^0 = 1000ms)
+      await act(async () => {
+        vi.advanceTimersByTime(1100)
+        await Promise.resolve()
+      })
+
+      expect(fetchFn).toHaveBeenCalledTimes(2)
+
+      consoleSpy.mockRestore()
+    })
+
+    it('increases delay exponentially with each retry', async () => {
+      // Use a fixed Math.random to make delays predictable (always max)
+      vi.spyOn(Math, 'random').mockReturnValue(1)
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+      const { result } = renderHook(() =>
+        useOptimisticData('initial', { baseDelay: 100, maxRetries: 5 })
+      )
+
+      const fetchFn = vi.fn().mockRejectedValue(new Error('fail'))
+
+      await act(async () => {
+        await result.current.fetchData(fetchFn)
+      })
+
+      // Retry 1: delay = 100 * 2^0 * 1 = 100ms
+      act(() => {
+        result.current.retry()
+      })
+      expect(fetchFn).toHaveBeenCalledTimes(1)
+
+      await act(async () => {
+        vi.advanceTimersByTime(100)
+        await Promise.resolve()
+      })
+      expect(fetchFn).toHaveBeenCalledTimes(2)
+
+      // Retry 2: delay = 100 * 2^1 * 1 = 200ms
+      act(() => {
+        result.current.retry()
+      })
+
+      await act(async () => {
+        vi.advanceTimersByTime(150)
+        await Promise.resolve()
+      })
+      expect(fetchFn).toHaveBeenCalledTimes(2) // not yet
+
+      await act(async () => {
+        vi.advanceTimersByTime(50)
+        await Promise.resolve()
+      })
+      expect(fetchFn).toHaveBeenCalledTimes(3)
+
+      // Retry 3: delay = 100 * 2^2 * 1 = 400ms
+      act(() => {
+        result.current.retry()
+      })
+
+      await act(async () => {
+        vi.advanceTimersByTime(350)
+        await Promise.resolve()
+      })
+      expect(fetchFn).toHaveBeenCalledTimes(3) // not yet
+
+      await act(async () => {
+        vi.advanceTimersByTime(50)
+        await Promise.resolve()
+      })
+      expect(fetchFn).toHaveBeenCalledTimes(4)
+
+      consoleSpy.mockRestore()
+      vi.spyOn(Math, 'random').mockRestore()
+    })
+
+    it('applies jitter so delay is randomized', () => {
+      const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0.5)
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+      const { result } = renderHook(() =>
+        useOptimisticData('initial', { baseDelay: 1000 })
+      )
+
+      const fetchFn = vi.fn().mockRejectedValue(new Error('fail'))
+
+      act(() => {
+        result.current.fetchData(fetchFn)
+      })
+
+      // Wait for fetch to complete
+      vi.advanceTimersByTime(0)
+
+      act(() => {
+        result.current.retry()
+      })
+
+      // With random=0.5, attempt 0: delay = 0.5 * 1000 * 2^0 = 500ms
+      // fetchFn should not have been called yet at 400ms
+      vi.advanceTimersByTime(400)
+      // After 500ms it should fire
+      vi.advanceTimersByTime(100)
+
+      expect(randomSpy).toHaveBeenCalled()
+      randomSpy.mockRestore()
+      consoleSpy.mockRestore()
+    })
+
+    it('caps backoff delay at 30 seconds', () => {
+      vi.spyOn(Math, 'random').mockReturnValue(1)
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+      const { result } = renderHook(() =>
+        useOptimisticData('initial', { baseDelay: 10000, maxRetries: 10 })
+      )
+
+      const fetchFn = vi.fn().mockRejectedValue(new Error('fail'))
+
+      act(() => {
+        result.current.fetchData(fetchFn)
+      })
+
+      vi.advanceTimersByTime(0)
+
+      // Simulate having already retried 4 times (retryCountRef = 4)
+      // Attempt 4: 10000 * 2^4 = 160000, but capped at 30000
+      // With random=1: delay = 30000
+      for (let i = 0; i < 4; i++) {
+        act(() => {
+          result.current.retry()
+        })
+        vi.advanceTimersByTime(30001)
+      }
+
+      // 5th retry: still capped at 30s
+      act(() => {
+        result.current.retry()
+      })
+
+      vi.advanceTimersByTime(29999)
+      // Should not have fired yet at 29999 for attempt with max cap
+      vi.advanceTimersByTime(2)
+      // Should have fired at 30000
+
+      consoleSpy.mockRestore()
+      vi.spyOn(Math, 'random').mockRestore()
+    })
+  })
+
+  // ─── Configurable Max Retries Tests ───────────────────────────────────────────
+
+  describe('configurable max retries', () => {
+    it('defaults to 5 retries', async () => {
+      vi.spyOn(Math, 'random').mockReturnValue(0)
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+      const { result } = renderHook(() => useOptimisticData('initial'))
+
+      const fetchFn = vi.fn().mockRejectedValue(new Error('fail'))
+
+      await act(async () => {
+        await result.current.fetchData(fetchFn)
+      })
+
+      for (let i = 0; i < 5; i++) {
+        act(() => {
+          result.current.retry()
+        })
+        await act(async () => {
+          vi.advanceTimersByTime(1)
+          await Promise.resolve()
+        })
+      }
+
+      expect(fetchFn).toHaveBeenCalledTimes(6) // 1 initial + 5 retries
+
+      // 6th retry should be ignored
+      act(() => {
+        result.current.retry()
+      })
+      await act(async () => {
+        vi.advanceTimersByTime(100000)
+        await Promise.resolve()
+      })
+      expect(fetchFn).toHaveBeenCalledTimes(6)
+
+      consoleSpy.mockRestore()
+      vi.spyOn(Math, 'random').mockRestore()
+    })
+
+    it('respects custom maxRetries option', async () => {
+      vi.spyOn(Math, 'random').mockReturnValue(0)
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+      const { result } = renderHook(() =>
+        useOptimisticData('initial', { maxRetries: 2 })
+      )
+
+      const fetchFn = vi.fn().mockRejectedValue(new Error('fail'))
+
+      await act(async () => {
+        await result.current.fetchData(fetchFn)
+      })
+
+      // Retry 1
+      act(() => {
+        result.current.retry()
+      })
+      await act(async () => {
+        vi.advanceTimersByTime(1)
+        await Promise.resolve()
+      })
+
+      // Retry 2
+      act(() => {
+        result.current.retry()
+      })
+      await act(async () => {
+        vi.advanceTimersByTime(1)
+        await Promise.resolve()
+      })
+
+      expect(fetchFn).toHaveBeenCalledTimes(3) // 1 initial + 2 retries
+
+      // Retry 3 should be ignored
+      act(() => {
+        result.current.retry()
+      })
+      await act(async () => {
+        vi.advanceTimersByTime(100000)
+        await Promise.resolve()
+      })
+      expect(fetchFn).toHaveBeenCalledTimes(3)
+
+      consoleSpy.mockRestore()
+      vi.spyOn(Math, 'random').mockRestore()
+    })
+
+    it('resets retry count after a successful fetch', async () => {
+      vi.spyOn(Math, 'random').mockReturnValue(0)
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+      const { result } = renderHook(() =>
+        useOptimisticData('initial', { maxRetries: 2 })
+      )
+
+      const failingFetchFn = vi.fn().mockRejectedValue(new Error('fail'))
+
+      await act(async () => {
+        await result.current.fetchData(failingFetchFn)
+      })
+
+      // Use up both retries
+      act(() => {
+        result.current.retry()
+      })
+      await act(async () => {
+        vi.advanceTimersByTime(1)
+        await Promise.resolve()
+      })
+
+      act(() => {
+        result.current.retry()
+      })
+      await act(async () => {
+        vi.advanceTimersByTime(1)
+        await Promise.resolve()
+      })
+
+      expect(result.current.retryCount).toBe(2)
+
+      // Now do a successful fetch — resets the counter
+      const successFetchFn = vi.fn().mockResolvedValue('success')
+      await act(async () => {
+        await result.current.fetchData(successFetchFn)
+      })
+
+      expect(result.current.retryCount).toBe(0)
+      expect(result.current.isRetrying).toBe(false)
+
+      consoleSpy.mockRestore()
+      vi.spyOn(Math, 'random').mockRestore()
+    })
+  })
+
+  // ─── retryCount / isRetrying Exposure Tests ───────────────────────────────────
+
+  describe('retryCount and isRetrying', () => {
+    it('exposes retryCount=0 and isRetrying=false initially', () => {
+      const { result } = renderHook(() => useOptimisticData('initial'))
+
+      expect(result.current.retryCount).toBe(0)
+      expect(result.current.isRetrying).toBe(false)
+    })
+
+    it('updates retryCount and isRetrying during backoff', async () => {
+      vi.spyOn(Math, 'random').mockReturnValue(1)
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+      const { result } = renderHook(() =>
+        useOptimisticData('initial', { baseDelay: 1000 })
+      )
+
+      const fetchFn = vi.fn().mockRejectedValue(new Error('fail'))
+
+      await act(async () => {
+        await result.current.fetchData(fetchFn)
+      })
+
+      act(() => {
+        result.current.retry()
+      })
+
+      expect(result.current.retryCount).toBe(1)
+      expect(result.current.isRetrying).toBe(true)
+
+      consoleSpy.mockRestore()
+      vi.spyOn(Math, 'random').mockRestore()
+    })
+
+    it('increments retryCount with each retry', async () => {
+      vi.spyOn(Math, 'random').mockReturnValue(0)
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+      const { result } = renderHook(() =>
+        useOptimisticData('initial', { maxRetries: 3, baseDelay: 100 })
+      )
+
+      const fetchFn = vi.fn().mockRejectedValue(new Error('fail'))
+
+      await act(async () => {
+        await result.current.fetchData(fetchFn)
+      })
+
+      act(() => {
+        result.current.retry()
+      })
+      expect(result.current.retryCount).toBe(1)
+
+      await act(async () => {
+        vi.advanceTimersByTime(1)
+        await Promise.resolve()
+      })
+
+      act(() => {
+        result.current.retry()
+      })
+      expect(result.current.retryCount).toBe(2)
+
+      await act(async () => {
+        vi.advanceTimersByTime(1)
+        await Promise.resolve()
+      })
+
+      act(() => {
+        result.current.retry()
+      })
+      expect(result.current.retryCount).toBe(3)
+
+      consoleSpy.mockRestore()
+      vi.spyOn(Math, 'random').mockRestore()
+    })
+  })
+
+  // ─── Abort / Unmount Cleanup Tests ────────────────────────────────────────────
+
+  describe('abort and unmount cleanup', () => {
+    it('clears backoff timer on unmount', async () => {
+      vi.spyOn(Math, 'random').mockReturnValue(1)
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+      const { result, unmount } = renderHook(() =>
+        useOptimisticData('initial', { baseDelay: 5000 })
+      )
+
+      const fetchFn = vi.fn().mockRejectedValue(new Error('fail'))
+
+      await act(async () => {
+        await result.current.fetchData(fetchFn)
+      })
+
+      act(() => {
+        result.current.retry()
+      })
+
+      expect(fetchFn).toHaveBeenCalledTimes(1)
+
+      // Unmount before timer fires
+      unmount()
+
+      // Advance timer — fetchFn should NOT be called again
+      vi.advanceTimersByTime(10000)
+      expect(fetchFn).toHaveBeenCalledTimes(1)
+
+      consoleSpy.mockRestore()
+      vi.spyOn(Math, 'random').mockRestore()
+    })
+
+    it('clears backoff timer when fetchData is called again', async () => {
+      vi.spyOn(Math, 'random').mockReturnValue(1)
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+      const { result } = renderHook(() =>
+        useOptimisticData('initial', { baseDelay: 5000 })
+      )
+
+      const failingFn = vi.fn().mockRejectedValue(new Error('fail'))
+
+      await act(async () => {
+        await result.current.fetchData(failingFn)
+      })
+
+      // Start a retry with backoff
+      act(() => {
+        result.current.retry()
+      })
+
+      expect(failingFn).toHaveBeenCalledTimes(1)
+
+      // Before the backoff timer fires, call fetchData with a new function
+      const successFn = vi.fn().mockResolvedValue('fresh data')
+      await act(async () => {
+        await result.current.fetchData(successFn)
+      })
+
+      // Advance past the original backoff timer
+      await act(async () => {
+        vi.advanceTimersByTime(10000)
+        await Promise.resolve()
+      })
+
+      // The failing fn should not have been called again
+      expect(failingFn).toHaveBeenCalledTimes(1)
+      expect(result.current.data).toBe('fresh data')
+
+      consoleSpy.mockRestore()
+      vi.spyOn(Math, 'random').mockRestore()
+    })
+
+    it('does not retry if abort controller was aborted during backoff', async () => {
+      vi.spyOn(Math, 'random').mockReturnValue(1)
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+      const { result } = renderHook(() =>
+        useOptimisticData('initial', { baseDelay: 2000 })
+      )
+
+      const fetchFn = vi.fn().mockRejectedValue(new Error('fail'))
+
+      await act(async () => {
+        await result.current.fetchData(fetchFn)
+      })
+
+      // Start retry
+      act(() => {
+        result.current.retry()
+      })
+
+      // Abort by calling fetchData again (which aborts the previous controller)
+      const abortingFn = vi.fn().mockResolvedValue('aborted path')
+      await act(async () => {
+        await result.current.fetchData(abortingFn)
+      })
+
+      // Advance past backoff
+      await act(async () => {
+        vi.advanceTimersByTime(3000)
+        await Promise.resolve()
+      })
+
+      // fetchFn should not be retried — only the aborting call should succeed
+      expect(fetchFn).toHaveBeenCalledTimes(1)
+      expect(abortingFn).toHaveBeenCalledTimes(1)
+      expect(result.current.data).toBe('aborted path')
+
+      consoleSpy.mockRestore()
+      vi.spyOn(Math, 'random').mockRestore()
+    })
+  })
+
+  // ─── Retries with latest fetch function ───────────────────────────────────────
+
+  it('retries with the latest fetch function using backoff', async () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0)
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    const { result } = renderHook(() =>
+      useOptimisticData('initial', { baseDelay: 100 })
+    )
 
     const staleFetchFn = vi.fn().mockRejectedValue(new Error('stale request failed'))
     await act(async () => {
@@ -325,9 +854,13 @@ describe('useOptimisticData', () => {
       await result.current.fetchData(latestFetchFn)
     })
 
-    await act(async () => {
+    act(() => {
       result.current.retry()
-      await Promise.resolve()
+    })
+
+    // Advance past backoff (random=0 means delay=0, but setTimeout(fn, 0) still needs advancing)
+    await act(async () => {
+      vi.advanceTimersByTime(1)
       await Promise.resolve()
     })
 
@@ -337,21 +870,6 @@ describe('useOptimisticData', () => {
     expect(result.current.hasError).toBe(false)
 
     consoleSpy.mockRestore()
-  })
-
-  it('keeps fetchData stable after data changes and non-memoized initial data rerenders', async () => {
-    const { result, rerender } = renderHook(({ seed }) => useOptimisticData({ value: seed }), {
-      initialProps: { seed: 'initial' },
-    })
-    const firstFetchData = result.current.fetchData
-
-    await act(async () => {
-      await result.current.fetchData(vi.fn().mockResolvedValue({ value: 'loaded' }))
-    })
-
-    rerender({ seed: 'new-inline-object' })
-
-    expect(result.current.data).toEqual({ value: 'loaded' })
-    expect(result.current.fetchData).toBe(firstFetchData)
+    vi.spyOn(Math, 'random').mockRestore()
   })
 })
