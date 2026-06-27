@@ -1,8 +1,7 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { AdminPage } from '../features/admin/pages/AdminPage';
-import * as authContext from '../shared/contexts/AuthContext';
 
 // Mock the components that might make API calls or have complex dependencies
 vi.mock('../features/admin/pages/AdminPage', () => ({
