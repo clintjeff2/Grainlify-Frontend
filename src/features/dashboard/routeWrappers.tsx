@@ -1,4 +1,4 @@
-import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { useParams, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { OpenSourceWeekPage } from './pages/OpenSourceWeekPage';
 import { OpenSourceWeekDetailPage } from './pages/OpenSourceWeekDetailPage';
 import { EcosystemsPage } from './pages/EcosystemsPage';
@@ -25,9 +25,9 @@ export function OpenSourceWeekDetailPageRoute() {
   const navigate = useNavigate();
   const location = useLocation();
   const state = location.state as { eventName?: string } || {};
-  const eventName = state.eventName || 'Event';
+  const eventName = state.eventName || '';
 
-  if (!eventId) return null;
+  if (!eventId) return <Navigate to="/dashboard/open-source-week" replace />;
 
   const handleBack = () => {
     navigate('/dashboard/open-source-week');
@@ -71,7 +71,7 @@ export function EcosystemDetailPageRoute() {
     logoUrl?: string | null;
   } || {};
 
-  if (!ecosystemId) return null;
+  if (!ecosystemId) return <Navigate to="/dashboard/ecosystems" replace />;
 
   const handleBack = () => {
     navigate('/dashboard/ecosystems');
@@ -113,7 +113,7 @@ export function ProjectDetailPageRoute() {
   const location = useLocation();
   const state = location.state as { backTarget?: string } || {};
 
-  if (!projectId) return null;
+  if (!projectId) return <Navigate to="/dashboard/browse" replace />;
 
   const handleBack = () => {
     if (state.backTarget) {
@@ -153,7 +153,8 @@ export function IssueDetailPageRoute() {
   const { projectId, issueId } = useParams<{ projectId: string; issueId: string }>();
   const navigate = useNavigate();
 
-  if (!projectId || !issueId) return null;
+  if (!projectId) return <Navigate to="/dashboard/browse" replace />;
+  if (!issueId) return <Navigate to={`/dashboard/projects/${projectId}`} replace />;
 
   const handleClose = () => {
     navigate(`/dashboard/projects/${projectId}`);
@@ -176,9 +177,12 @@ export function SearchPageRoute() {
     navigate('/dashboard/discover');
   };
 
-  const handleIssueClick = () => {
-    // Navigate to the project/issue view
-    navigate('/dashboard/discover');
+  const handleIssueClick = (issueId?: string, projectId?: string) => {
+    if (issueId && projectId) {
+      navigate(`/dashboard/projects/${projectId}/issues/${issueId}`);
+    } else {
+      navigate('/dashboard/discover');
+    }
   };
 
   const handleProjectClick = (projectId: string) => {

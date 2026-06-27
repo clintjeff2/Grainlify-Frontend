@@ -9,6 +9,8 @@ interface NotificationRowProps {
   onEmailChange: (value: boolean) => void;
   onWeeklyChange: (value: boolean) => void;
   showBorder?: boolean;
+  emailDisabled?: boolean;
+  weeklyDisabled?: boolean;
 }
 
 export function NotificationRow({
@@ -19,6 +21,8 @@ export function NotificationRow({
   onEmailChange,
   onWeeklyChange,
   showBorder = true,
+  emailDisabled = false,
+  weeklyDisabled = false,
 }: NotificationRowProps) {
   const { theme } = useTheme();
 
@@ -36,6 +40,7 @@ export function NotificationRow({
         <ToggleSwitch
           enabled={emailEnabled}
           onChange={onEmailChange}
+          disabled={emailDisabled}
           aria-label={`Email notifications for ${title}`}
         />
       </div>
@@ -43,6 +48,7 @@ export function NotificationRow({
         <ToggleSwitch
           enabled={weeklyEnabled}
           onChange={onWeeklyChange}
+          disabled={weeklyDisabled}
           aria-label={`Weekly summary email for ${title}`}
         />
       </div>

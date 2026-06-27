@@ -1,16 +1,38 @@
 import { logger } from '../../../../shared/utils/logger';
 import { useEffect, useCallback, useMemo, useRef, useState } from 'react';
-import { X, ExternalLink, User, ChevronDown, Plus, Award, Users, Star, CheckCircle, MessageSquare, Filter, Search } from 'lucide-react';
+import { X, ExternalLink, User, ChevronDown, Plus, Award, Users, Star, CheckCircle, MessageSquare, Filter, Search, ShieldOff, AlertCircle } from 'lucide-react';
 import { useTheme } from '../../../../shared/contexts/ThemeContext';
 import { useAuth } from '../../../../shared/contexts/AuthContext';
+import { useOptimisticData } from '../../../../shared/hooks/useOptimisticData';
 import { Issue } from '../../types';
 import { EmptyIssueState } from './EmptyIssueState';
 import { IssueCard } from '../../../../shared/components/ui/IssueCard';
 import { Modal, ModalFooter, ModalButton } from '../../../../shared/components/ui/Modal';
-import { applyToIssue, getProjectIssues, postBotComment, withdrawApplication, assignApplicant, unassignApplicant, rejectApplication } from '../../../../shared/api/client';
+import { applyToIssue, getMaintainerIssues, postBotComment, withdrawApplication, assignApplicant, unassignApplicant, rejectApplication } from '../../../../shared/api/client';
 import { formatDistanceToNow } from 'date-fns';
 import { IssueCardSkeleton } from '../../../../shared/components/IssueCardSkeleton';
 import RenderMarkdownContent from '../../../../app/utils/renderMarkdown';
+
+/**
+ * Lowercase set of well-known programming language names.
+ * Used to classify GitHub issue labels into the "Languages" filter bucket
+ * vs the general "Categories" bucket.
+ */
+const KNOWN_LANGUAGES = new Set([
+  'javascript', 'typescript', 'rust', 'python', 'go', 'golang', 'java', 'c', 'c++',
+  'c#', 'ruby', 'php', 'swift', 'kotlin', 'scala', 'haskell', 'elixir', 'erlang',
+  'solidity', 'vyper', 'makefile', 'shell', 'bash', 'html', 'css', 'scss', 'sass',
+  'dart', 'r', 'julia', 'perl', 'lua', 'assembly', 'webassembly', 'wasm',
+  'move', 'cairo', 'zig', 'nim', 'ocaml', 'f#', 'clojure', 'groovy', 'nix',
+]);
+
+/**
+ * Sanitizes an external label name for safe display.
+ * JSX automatically HTML-escapes text content, so XSS is not a concern for
+ * rendered text; this guards against layout breakage from excessively long or
+ * whitespace-padded strings sourced from external GitHub repositories.
+ */
+const sanitizeLabelName = (name: string): string => name.trim().slice(0, 60);
 
 interface Project {
   id: string;
@@ -56,6 +78,7 @@ interface IssueFromAPI {
 
 export function IssuesTab({ onNavigate, selectedProjects, onRefresh, initialSelectedIssueId, initialSelectedProjectId, viewMode = 'maintainer' }: IssuesTabProps) {
   const { theme } = useTheme();
+  const isDark = theme === 'dark';
   const { userRole, user } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null);
@@ -86,8 +109,26 @@ export function IssuesTab({ onNavigate, selectedProjects, onRefresh, initialSele
   const [botCommentError, setBotCommentError] = useState<string | null>(null);
   const [isPostingBotComment, setIsPostingBotComment] = useState(false);
   const [actionInProgress, setActionInProgress] = useState<{ type: 'withdraw' | 'assign' | 'unassign' | 'reject'; id: string } | null>(null);
+  const isAuthorized = viewMode === 'contributor' || userRole === 'maintainer' || userRole === 'admin';
+
+  const {
+    data: fetchedIssues,
+    isLoading: isLoadingIssues,
+    hasError: hasIssuesError,
+    error: issuesError,
+    retry: retryLoadIssues,
+    fetchData: fetchIssuesData,
+  } = useOptimisticData<Array<IssueFromAPI & { projectName: string; projectId: string }>>([], {
+    cacheKey: `maintainer-issues-${selectedProjects.map((p) => p.id).join(',')}`,
+    cacheDuration: 30000,
+  });
+
   const [issues, setIssues] = useState<Array<IssueFromAPI & { projectName: string; projectId: string }>>([]);
-  const [isLoadingIssues, setIsLoadingIssues] = useState(true);
+
+  // Sync fetched issues with local state
+  useEffect(() => {
+    setIssues(fetchedIssues);
+  }, [fetchedIssues]);
   const filterBtnRef = useRef<HTMLButtonElement | null>(null);
   const filterPopoverRef = useRef<HTMLDivElement | null>(null);
   const [filterPopoverPos, setFilterPopoverPos] = useState<{ top: number; left: number }>({ top: 140, left: 350 });
@@ -156,24 +197,21 @@ export function IssuesTab({ onNavigate, selectedProjects, onRefresh, initialSele
     }
   }, []);
 
-  // Fetch issues from selected projects
-  useEffect(() => {
-    loadIssues();
-  }, [selectedProjects]);
-
-  const loadIssues = async () => {
-    setIsLoadingIssues(true);
-    try {
+  const loadIssues = useCallback(async () => {
+    if (!isAuthorized) return;
+    await fetchIssuesData(async (signal) => {
       if (selectedProjects.length === 0) {
-        setIssues([]);
-        setIsLoadingIssues(false);
-        return;
+        return [];
       }
 
       // Fetch issues from all selected projects in parallel
+      let successCount = 0;
+      let lastError: any = null;
+
       const issuePromises = selectedProjects.map(async (project: Project) => {
         try {
-          const response = await getProjectIssues(project.id);
+          const response = await getMaintainerIssues(project.id, { signal });
+          successCount++;
           return (response.issues || []).map((issue: IssueFromAPI) => ({
             ...issue,
             projectName: project.github_full_name,
@@ -181,11 +219,15 @@ export function IssuesTab({ onNavigate, selectedProjects, onRefresh, initialSele
           }));
         } catch (err) {
           logger.error(`Failed to fetch issues for ${project.github_full_name}:`, err);
+          lastError = err;
           return [];
         }
       });
 
       const allIssues = await Promise.all(issuePromises);
+      if (selectedProjects.length > 0 && successCount === 0 && lastError) {
+        throw lastError;
+      }
       const flattenedIssues = allIssues.flat();
 
       // Sort by updated_at (most recent first)
@@ -195,15 +237,14 @@ export function IssuesTab({ onNavigate, selectedProjects, onRefresh, initialSele
         return dateB - dateA;
       });
 
-      setIssues(flattenedIssues);
-      setIsLoadingIssues(false);
-    } catch (err) {
-      logger.error('Failed to load issues:', err);
-      // Keep loading state true to show skeleton forever when backend is down
-      setIssues([]);
-      // Don't set isLoadingIssues to false - keep showing skeleton
-    }
-  };
+      return flattenedIssues;
+    });
+  }, [selectedProjects, fetchIssuesData, isAuthorized]);
+
+  // Fetch issues from selected projects
+  useEffect(() => {
+    loadIssues();
+  }, [loadIssues]);
 
   // Refresh issues when selectedProjects change
   // Also refresh when page becomes visible (user switches back to tab)
@@ -229,7 +270,7 @@ export function IssuesTab({ onNavigate, selectedProjects, onRefresh, initialSele
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('repositories-refreshed', handleRepositoriesRefreshed);
     };
-  }, [selectedProjects]);
+  }, [loadIssues, selectedProjects.length]);
 
   const handleProfileClick = () => {
     setSelectedIssue(null);
@@ -323,7 +364,6 @@ Only applications submitted via the apply link above will be considered. Please 
   };
 
   const applicationData = getApplicationData(selectedIssue, selectedIssueFromAPI);
-  const isDark = theme === 'dark';
 
   const canApplyToSelectedIssue = selectedIssueFromAPI && (() => {
     const isOpen = (selectedIssueFromAPI.state || '').toLowerCase() === 'open';
@@ -592,8 +632,13 @@ Only applications submitted via the apply link above will be considered. Please 
           return issueTags.includes(category.toLowerCase());
         });
 
-      // Languages filter (not available in current API response, skip for now)
-      const matchesLanguages = selectedFilters.languages.length === 0;
+      // Languages filter: match against issue labels using the same label data as categories
+      const matchesLanguages =
+        selectedFilters.languages.length === 0 ||
+        selectedFilters.languages.some((lang) => {
+          const issueTags = issue.labels?.map((l: any) => (l.name || l).toLowerCase()) || [];
+          return issueTags.includes(lang.toLowerCase());
+        });
 
       // Labels filter
       const matchesLabels =
@@ -617,7 +662,7 @@ Only applications submitted via the apply link above will be considered. Please 
     });
   }, [issues, searchQuery, selectedFilters]);
 
-  // Extract unique labels from all loaded issues
+  /** Extracts all unique label names from loaded issues for the Labels filter section. */
   const availableLabels = useMemo(() => {
     const labelsSet = new Set<string>();
     issues.forEach(issue => {
@@ -625,12 +670,53 @@ Only applications submitted via the apply link above will be considered. Please 
         issue.labels.forEach((label: any) => {
           const labelName = typeof label === 'string' ? label : label.name;
           if (labelName) {
-            labelsSet.add(labelName);
+            labelsSet.add(sanitizeLabelName(labelName));
           }
         });
       }
     });
     return Array.from(labelsSet).sort();
+  }, [issues]);
+
+  /**
+   * Category filter options derived dynamically from issue labels.
+   * A label is classified as a category when its lowercase form does not match
+   * any entry in {@link KNOWN_LANGUAGES}. Keeps filters in sync as the issue
+   * set changes because it re-derives on every `issues` update.
+   */
+  const availableCategories = useMemo(() => {
+    const catSet = new Set<string>();
+    issues.forEach((issue) => {
+      if (Array.isArray(issue.labels)) {
+        issue.labels.forEach((label: any) => {
+          const raw = typeof label === 'string' ? label : label?.name;
+          if (raw && !KNOWN_LANGUAGES.has(raw.toLowerCase())) {
+            catSet.add(sanitizeLabelName(raw));
+          }
+        });
+      }
+    });
+    return Array.from(catSet).sort();
+  }, [issues]);
+
+  /**
+   * Language filter options derived dynamically from issue labels.
+   * A label is classified as a language when its lowercase form matches an entry
+   * in {@link KNOWN_LANGUAGES}. Keeps filters in sync as the issue set changes.
+   */
+  const availableLanguages = useMemo(() => {
+    const langSet = new Set<string>();
+    issues.forEach((issue) => {
+      if (Array.isArray(issue.labels)) {
+        issue.labels.forEach((label: any) => {
+          const raw = typeof label === 'string' ? label : label?.name;
+          if (raw && KNOWN_LANGUAGES.has(raw.toLowerCase())) {
+            langSet.add(sanitizeLabelName(raw));
+          }
+        });
+      }
+    });
+    return Array.from(langSet).sort();
   }, [issues]);
 
   // If we were opened from a deep-link (e.g. project detail click), auto-select the target issue.
@@ -674,6 +760,26 @@ Only applications submitted via the apply link above will be considered. Please 
     });
   }, [initialSelectedProjectId]);
 
+  if (!isAuthorized) {
+    return (
+      <div className={`backdrop-blur-[40px] rounded-[24px] border p-8 flex flex-col items-center justify-center text-center transition-colors ${
+        isDark
+          ? 'bg-[#2d2820]/[0.4] border-white/10'
+          : 'bg-white/[0.12] border-white/20'
+      }`}>
+        <ShieldOff className="w-16 h-16 text-red-500/70 mb-4" strokeWidth={1.5} />
+        <h3 className={`text-[20px] font-bold mb-2 transition-colors ${
+          isDark ? 'text-[#e8dfd0]' : 'text-[#2d2820]'
+        }`}>Access Restricted</h3>
+        <p className={`text-[14px] max-w-md transition-colors ${
+          isDark ? 'text-[#b8a898]' : 'text-[#7a6b5a]'
+        }`}>
+          You must be a project maintainer or admin to access this dashboard.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="flex gap-6 h-[calc(100vh-220px)]">
       {/* Left Sidebar - Issues List */}
@@ -706,6 +812,8 @@ Only applications submitted via the apply link above will be considered. Please 
           {/* Filter Button with Badge */}
           <button
             ref={filterBtnRef}
+            data-testid="filter-button"
+            aria-label="Filter issues"
             onClick={() => setIsFilterModalOpen((v) => !v)}
             className={`relative p-3 rounded-[16px] backdrop-blur-[40px] border hover:bg-white/[0.15] transition-all ${isDark
               ? 'bg-white/[0.12] border-white/20'
@@ -721,7 +829,31 @@ Only applications submitted via the apply link above will be considered. Please 
 
         {/* Issues List - height fits ~5 cards so 5 show at a time without scrolling; more issues scroll */}
         <div className="flex-1 overflow-y-auto space-y-3 pr-2 scrollbar-custom min-h-0 max-h-[calc(5*7.5rem+4*0.75rem)]">
-          {isLoadingIssues ? (
+          {hasIssuesError ? (
+            <div className={`flex flex-col items-center gap-3 px-6 py-6 mx-2 rounded-[16px] border transition-colors ${
+              isDark
+                ? 'bg-red-500/10 border-red-500/20 text-red-400'
+                : 'bg-red-100/50 border-red-300/40 text-red-700'
+            }`}>
+              <AlertCircle className="w-8 h-8 flex-shrink-0" />
+              <div className="text-center">
+                <p className="text-[14px] font-semibold mb-1">Failed to load issues</p>
+                <p className="text-[12px] opacity-80 mb-3">
+                  {issuesError instanceof Error ? issuesError.message : typeof issuesError === 'string' ? issuesError : 'An unknown error occurred'}
+                </p>
+                <button
+                  onClick={retryLoadIssues}
+                  className={`px-4 py-2 rounded-[10px] text-[12px] font-bold border transition-all cursor-pointer ${
+                    isDark
+                      ? 'bg-white/10 hover:bg-white/15 border-white/20 text-white'
+                      : 'bg-white hover:bg-white/50 border-gray-300 text-gray-800'
+                  }`}
+                >
+                  Retry Connection
+                </button>
+              </div>
+            </div>
+          ) : isLoadingIssues ? (
             <div className="space-y-3">
               {[...Array(8)].map((_, idx) => (
                 <IssueCardSkeleton key={idx} />
@@ -1552,12 +1684,12 @@ Only applications submitted via the apply link above will be considered. Please 
                 </div>
               </div>
 
-              {/* Categories */}
+              {/* Categories — derived from issue labels that are not programming languages */}
               <div>
                 <h3 className={`text-[12px] font-semibold mb-2 transition-colors ${isDark ? 'text-[#e8dfd0]' : 'text-[#2d2820]'
                   }`}>Categories</h3>
                 <div className="flex flex-wrap gap-2">
-                  {['Blockchain & Cryptocurrencies', 'Cryptography', 'Stellar', 'Web Development'].map((category) => (
+                  {availableCategories.map((category) => (
                     <button
                       key={category}
                       onClick={() => {
@@ -1584,15 +1716,22 @@ Only applications submitted via the apply link above will be considered. Please 
                       {category}
                     </button>
                   ))}
+                  {availableCategories.length === 0 && (
+                    <div className="text-center py-3 w-full">
+                      <p className={`text-[11px] ${isDark ? 'text-[#b8a898]' : 'text-[#7a6b5a]'}`}>
+                        {isLoadingIssues ? 'Loading categories...' : 'No categories available'}
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
 
-              {/* Languages */}
+              {/* Languages — derived from issue labels that match known programming language names */}
               <div>
                 <h3 className={`text-[12px] font-semibold mb-2 transition-colors ${isDark ? 'text-[#e8dfd0]' : 'text-[#2d2820]'
                   }`}>Languages</h3>
                 <div className="flex flex-wrap gap-2">
-                  {['JavaScript', 'Makefile', 'Rust', 'Shell', 'TypeScript'].map((language) => (
+                  {availableLanguages.map((language) => (
                     <button
                       key={language}
                       onClick={() => {
@@ -1619,6 +1758,13 @@ Only applications submitted via the apply link above will be considered. Please 
                       {language}
                     </button>
                   ))}
+                  {availableLanguages.length === 0 && (
+                    <div className="text-center py-3 w-full">
+                      <p className={`text-[11px] ${isDark ? 'text-[#b8a898]' : 'text-[#7a6b5a]'}`}>
+                        {isLoadingIssues ? 'Loading languages...' : 'No languages available'}
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
 

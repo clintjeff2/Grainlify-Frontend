@@ -13,8 +13,9 @@ Thank you for your interest in contributing to **Grainlify**! This document prov
 5. [Routing Setup](#routing-setup)
 6. [API Client Conventions](#api-client-conventions)
 7. [Testing Setup](#testing-setup)
-8. [Available Scripts](#available-scripts)
-9. [Pull Request Checklist](#pull-request-checklist)
+8. [Git Hooks](#git-hooks)
+9. [Available Scripts](#available-scripts)
+10. [Pull Request Checklist](#pull-request-checklist)
 
 ---
 
@@ -89,6 +90,41 @@ To keep features isolated:
 - **Wrong**: `import { ApplicationCard } from '../../features/maintainers/components/issues/ApplicationCard';`
 - **Right**: Ensure that any component, hook, or type intended to be used outside the feature is exported from `src/features/<feature-name>/index.ts`, and import it directly:
   `import { MaintainersPageRoute } from '@/features/maintainers';`
+
+### Architecture Boundaries
+
+Grainlify uses three intentional layers in `src/` so that ownership stays clear and duplicate directories do not reappear.
+
+- **`src/app/`**: App shell and composition layer. This is where top-level app structure, routes, global layout, bootstrapping, and page-level orchestration live. The app layer may compose shared primitives and feature modules, but it should not own reusable business logic that should be shared.
+- **`src/features/*`**: Feature-specific modules. Each feature owns its own pages, components, data, types, and public exports for that domain. Feature code may use shared infrastructure, but it should stay focused on one capability and not re-create app-wide concerns.
+- **`src/shared/`**: Shared infrastructure layer. This is the home for reusable contexts, UI primitives, API helpers, hooks, i18n, config, styles, and utilities. If something is used by more than one feature or by the app shell itself, it belongs here.
+
+#### Import Direction
+
+Keep imports one-way so the layers remain easy to reason about:
+
+- **`app` → `shared` and `features`**: The app layer may compose shared infrastructure and feature modules.
+- **`features` → `shared`**: Features may consume shared primitives and helpers, but they must not import from `src/app/`.
+- **`shared` → no feature/app dependency**: Shared code should stay generic and must not depend on feature-specific modules or app composition code.
+
+#### Placement Rules
+
+- **Contexts and UI primitives belong in `src/shared/`**. That means auth/session contexts, theme providers, common buttons, form controls, guards, and other reusable interface primitives should live under `src/shared/contexts/` or `src/shared/components/` rather than being recreated in `src/app/` or inside a feature.
+- **Authentication and token handling stay in shared infrastructure**. Keep auth/token logic in `src/shared/contexts/` and `src/shared/api/` so secrets, refresh flows, and token storage remain centralized and secure.
+- **When in doubt, promote to shared** if the code is reused across features or the app shell; keep only feature-specific behavior in the feature folder.
+
+```text
+src/app/            # app shell, routes, global composition
+  └── imports shared + features
+
+src/features/*/     # feature-specific business logic and UI
+  └── imports shared
+
+src/shared/         # reusable contexts, UI primitives, API, hooks, utilities
+  └── imported by app and features
+```
+
+This guidance complements the duplicate-cleanup work described in [LEGACY_CLEANUP.md](LEGACY_CLEANUP.md) and [DOCUMENTATION_REFRESH_SUMMARY.md](DOCUMENTATION_REFRESH_SUMMARY.md), which already document the earlier `app/` vs `shared/` duplication cleanup.
 
 ---
 
@@ -168,6 +204,38 @@ E2E tests verify user workflows in `e2e/`.
   - `setupMockAuth`: Mocks profile details, login, and dashboard stats.
   - `setupMockBrowse`: Mocks ecosystem arrays and project directories.
   - `setupMockLeaderboard`: Mocks leaderboard statistics.
+
+---
+
+## Git Hooks
+
+Grainlify uses [Husky](https://typicode.github.io/husky/) to enforce code quality locally before changes reach CI.
+
+### Hooks
+
+| Hook         | Trigger        | Action                                                               |
+| :----------- | :------------- | :------------------------------------------------------------------- |
+| `pre-commit` | `git commit`   | Runs `lint-staged` — formats and ESLint-fixes all staged `*.ts`/`*.tsx` files via Prettier and ESLint. |
+| `pre-push`   | `git push`     | Runs `npm run typecheck` — verifies TypeScript compiles with zero errors. |
+
+### How it works
+
+- **`lint-staged`** only processes files staged for the commit, so unrelated files are never touched.
+- **Prettier** reformats staged files in-place; **ESLint** auto-fixes fixable rule violations.
+- **TypeScript** type-checking runs on push so type errors cannot reach the remote branch.
+
+### Setup
+
+Hooks are installed automatically when you run `pnpm install` (via the `prepare` script). No manual steps are needed after the initial install.
+
+### Bypassing hooks (emergencies only)
+
+```bash
+git commit --no-verify   # skip pre-commit
+git push --no-verify     # skip pre-push
+```
+
+> ⚠️ Use `--no-verify` sparingly. Bypassed commits must be cleaned up before merge.
 
 ---
 

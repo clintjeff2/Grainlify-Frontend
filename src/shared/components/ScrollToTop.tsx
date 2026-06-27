@@ -15,7 +15,9 @@ import { useLocation } from 'react-router-dom';
  *
  * Same-pathname navigations (only search/hash changed) do not trigger a
  * scroll or focus shift.
+ * @returns null — renders no DOM nodes; side-effects only.
  */
+
 export function ScrollToTop() {
   const { pathname, hash } = useLocation();
   const prevPathname = useRef<string | null>(null);

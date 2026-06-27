@@ -3,7 +3,7 @@
  */
 
 import { API_BASE_URL } from '../config/api'
-import { BillingProfile } from '../../features/settings/types'
+import { BillingProfile, NotificationSettings } from '../../features/settings/types'
 import { BlogPost } from '../../features/blog/types'
 
 // Token management
@@ -152,6 +152,44 @@ export type LandingStats = {
 
 export const getLandingStats = () => apiRequest<LandingStats>('/stats/landing')
 
+// Analytics
+export interface ActivityDataPoint {
+  month: string
+  value: number
+  trend: number
+  new: number
+  reactivated: number
+  active: number
+  churned: number
+  prMerged: number
+  rewarded: number
+}
+
+export interface ContributorRegion {
+  name: string
+  value: number
+  percentage: number
+}
+
+export interface AnalyticsStats {
+  billing_profile_count: number
+  total_contributor_count: number
+  active_contributor_count: number
+  total_count: number
+}
+
+export const getProjectActivity = (interval: string) =>
+  apiRequest<ActivityDataPoint[]>(`/stats/project-activity?interval=${encodeURIComponent(interval)}`)
+
+export const getContributorActivity = (interval: string) =>
+  apiRequest<ActivityDataPoint[]>(`/stats/contributor-activity?interval=${encodeURIComponent(interval)}`)
+
+export const getContributorsByRegion = () =>
+  apiRequest<ContributorRegion[]>('/stats/contributors-by-region')
+
+export const getAnalyticsStats = () =>
+  apiRequest<AnalyticsStats>('/stats/analytics-summary')
+
 // Authentication
 export const getCurrentUser = () =>
   apiRequest<{
@@ -288,6 +326,45 @@ export type ProfileReward = {
  */
 export const getProfileRewards = () =>
   apiRequest<{ rewards: ProfileReward[] }>('/profile/rewards', { requiresAuth: true })
+
+export type ProfileContribution = {
+  id: string | number
+  title?: string | null
+  status?: string | null
+  project_name?: string | null
+  project?: string | null
+  repository?: string | null
+  github_full_name?: string | null
+  contributor_login?: string | null
+  author_login?: string | null
+  badge?: string | number | null
+  issue_number?: number | null
+  number?: number | null
+  tag?: string | null
+  label?: string | null
+  labels?: Array<string | { name?: string | null }> | null
+  url?: string | null
+  created_at?: string | null
+  updated_at?: string | null
+  submitted_at?: string | null
+  merged_at?: string | null
+  rewarded?: boolean | null
+  is_rewarded?: boolean | null
+  reward_status?: string | null
+  amount?: number | string | null
+}
+
+/**
+ * Fetches the authenticated contributor's board items.
+ *
+ * @returns API contribution rows for the Applied, Assigned, Pending Review,
+ * and Complete board. The UI normalizes nullable fields before rendering so
+ * repository-supplied text is displayed as escaped React text, never HTML.
+ */
+export const getProfileContributions = () =>
+  apiRequest<{ contributions: ProfileContribution[] }>('/profile/contributions', {
+    requiresAuth: true,
+  })
 
 export const getProjectsContributed = (userId?: string, login?: string) => {
   const params = new URLSearchParams()
@@ -486,6 +563,7 @@ export const getPublicProjectIssues = (projectId: string) =>
       url: string
       updated_at: string | null
       last_seen_at: string
+      deadline?: string | null
     }>
   }>(`/projects/${projectId}/issues/public`)
 
@@ -983,43 +1061,80 @@ export const syncProject = (projectId: string) =>
     method: 'POST',
   })
 
-// Project Data (Issues and PRs)
-export const getProjectIssues = (projectId: string) =>
-  apiRequest<{
-    issues: Array<{
-      github_issue_id: number
-      number: number
-      state: string
-      title: string
-      description: string | null
-      author_login: string
-      assignees: any[]
-      labels: any[]
-      comments_count: number
-      comments: any[]
-      url: string
-      updated_at: string | null
-      last_seen_at: string
-    }>
-  }>(`/projects/${projectId}/issues`, { requiresAuth: true })
+export interface MaintainerComment {
+  id: number
+  body: string
+  user: {
+    login: string
+  }
+  created_at: string
+  updated_at: string
+}
 
-export const getProjectPRs = (projectId: string) =>
-  apiRequest<{
-    prs: Array<{
-      github_pr_id: number
-      number: number
-      state: string
-      title: string
-      author_login: string
-      url: string
-      merged: boolean
-      created_at: string | null
-      updated_at: string | null
-      closed_at: string | null
-      merged_at: string | null
-      last_seen_at: string
-    }>
-  }>(`/projects/${projectId}/prs`, { requiresAuth: true })
+export interface MaintainerIssue {
+  github_issue_id: number
+  number: number
+  state: string
+  title: string
+  description: string | null
+  author_login: string
+  assignees: any[]
+  labels: any[]
+  comments_count: number
+  comments: MaintainerComment[]
+  url: string
+  updated_at: string | null
+  last_seen_at: string
+}
+
+export interface MaintainerPR {
+  github_pr_id: number
+  number: number
+  state: string
+  title: string
+  author_login: string
+  url: string
+  merged: boolean
+  created_at: string | null
+  updated_at: string | null
+  closed_at: string | null
+  merged_at: string | null
+  last_seen_at: string
+}
+
+/**
+ * Fetches the list of issues for a specific project.
+ * Requires maintainer authentication (requiresAuth: true).
+ *
+ * @param projectId - The unique identifier of the project
+ * @param options - Optional API request options (e.g. AbortSignal)
+ * @returns Promise resolving to an object containing the project's issues
+ * @throws {Error} If authentication fails or the request is unauthorized
+ */
+export const getMaintainerIssues = (projectId: string, options?: ApiRequestOptions) =>
+  apiRequest<{ issues: MaintainerIssue[] }>(`/projects/${projectId}/issues`, {
+    requiresAuth: true,
+    ...options,
+  })
+
+/**
+ * Fetches the list of pull requests for a specific project.
+ * Requires maintainer authentication (requiresAuth: true).
+ *
+ * @param projectId - The unique identifier of the project
+ * @param options - Optional API request options (e.g. AbortSignal)
+ * @returns Promise resolving to an object containing the project's pull requests
+ * @throws {Error} If authentication fails or the request is unauthorized
+ */
+export const getMaintainerPRs = (projectId: string, options?: ApiRequestOptions) =>
+  apiRequest<{ prs: MaintainerPR[] }>(`/projects/${projectId}/prs`, {
+    requiresAuth: true,
+    ...options,
+  })
+
+// Project Data (Issues and PRs) - Deprecated/Wrapper
+export const getProjectIssues = (projectId: string) => getMaintainerIssues(projectId)
+export const getProjectPRs = (projectId: string) => getMaintainerPRs(projectId)
 
 export const applyToIssue = (projectId: string, issueNumber: number, message: string) =>
   apiRequest<{
@@ -1132,4 +1247,16 @@ export const acceptTerms = (version: string) =>
     requiresAuth: true,
     method: 'POST',
     body: JSON.stringify({ version }),
+  })
+
+export const getNotificationSettings = () =>
+  apiRequest<NotificationSettings>('/profile/notifications', {
+    requiresAuth: true,
+  })
+
+export const updateNotificationSettings = (settings: NotificationSettings) =>
+  apiRequest<{ ok: boolean }>('/profile/notifications', {
+    method: 'PUT',
+    body: JSON.stringify(settings),
+    requiresAuth: true,
   })

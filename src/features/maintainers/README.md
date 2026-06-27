@@ -79,11 +79,12 @@ The MaintainersPage component provides:
 - State management for active tab and selected repositories
 - Routing through `onNavigate` prop for profile links
 
-## Data
+## Data and API Integration
 
-Mock data is provided for:
-- Issues with applicants, discussions, tags, and metadata
-- Pull requests with author badges, status, and indicators
-- Dashboard stats and recent activity
+The Issues and Pull Requests tabs are wired to the backend API via the `useOptimisticData` hook:
+- **Issues**: Fetched via `getMaintainerIssues(projectId)` in `src/shared/api/client.ts`
+- **Pull Requests**: Fetched via `getMaintainerPRs(projectId)` in `src/shared/api/client.ts`
+- Both endpoints run with `requiresAuth: true` and are restricted to users with `maintainer` or `admin` roles.
+- The UI handles all loading states (via `IssueCardSkeleton` / `PRRowSkeleton`), empty results (via `EmptyIssueState`), and error occurrences with inline retry connection triggers.
 
-All data files are located in `/src/features/maintainers/data/` for easy maintenance and updates.
+The static files `/src/features/maintainers/data/issuesData.ts` and `/src/features/maintainers/data/pullRequestsData.ts` are preserved purely as test fixtures and reference designs.

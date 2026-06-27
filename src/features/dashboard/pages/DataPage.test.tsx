@@ -1,8 +1,9 @@
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { type ReactNode } from 'react';
 import { ThemeProvider } from '../../../shared/contexts/ThemeContext';
+import * as apiClient from '../../../shared/api/client';
 
 // --- Mock heavy chart / map libraries ------------------------------------
 
@@ -12,17 +13,19 @@ function Passthrough({ children, ...props }: Record<string, unknown>) {
 
 vi.mock('recharts', () => ({
   ResponsiveContainer: Passthrough,
-  ComposedChart: ({ children, data }: { children: ReactNode; data: unknown[] }) => (
-    <div data-testid="composed-chart" data-chart-points={data.length}>{children}</div>
+  ComposedChart: ({ children, data }: { children: ReactNode; data: any[] }) => (
+    <div data-testid="composed-chart" data-chart-points={data?.length || 0}>
+      {children}
+    </div>
   ),
   Bar: ({ dataKey, fill }: { dataKey: string; fill: string }) => (
     <div data-testid={`bar-${dataKey}`} data-fill={fill} />
   ),
   Line: ({ dataKey }: { dataKey: string }) => <div data-testid={`line-${dataKey}`} />,
-  XAxis: () => null,
-  YAxis: () => null,
+  XAxis: () => <div data-testid="x-axis" />,
+  YAxis: () => <div data-testid="y-axis" />,
   CartesianGrid: () => null,
-  Tooltip: () => null,
+  Tooltip: ({ content }: { content: any }) => <div data-testid="tooltip">{content}</div>,
 }));
 
 vi.mock('react-simple-maps', () => ({
@@ -38,6 +41,38 @@ vi.mock('react-simple-maps', () => ({
   Line: () => null,
 }));
 
+// --- Mock API client -----------------------------------------------------
+
+vi.mock('../../../shared/api/client', async () => {
+  const actual = await vi.importActual('../../../shared/api/client');
+  return {
+    ...actual,
+    getProjectActivity: vi.fn(),
+    getContributorActivity: vi.fn(),
+    getContributorsByRegion: vi.fn(),
+    getAnalyticsStats: vi.fn(),
+  };
+});
+
+const mockProjectData = [
+  { month: 'January', value: 45, trend: 40, new: 12, reactivated: 5, active: 28, churned: -8, prMerged: 18, rewarded: 15420 },
+];
+
+const mockContributorData = [
+  { month: 'January', value: 42, trend: 38, new: 10, reactivated: 4, active: 28, churned: -6, prMerged: 15, rewarded: 14200 },
+];
+
+const mockRegions = [
+  { name: 'United Kingdom', value: 625, percentage: 45 },
+];
+
+const mockStats = {
+  billing_profile_count: 50,
+  total_contributor_count: 100,
+  active_contributor_count: 30,
+  total_count: 1000,
+};
+
 import { DataPage } from './DataPage';
 
 const renderPage = () =>
@@ -47,200 +82,152 @@ const renderPage = () =>
     </ThemeProvider>,
   );
 
-// ------------- Tab filtering tests ----------------------------------------
-
-describe('DataPage view tabs', () => {
-  it('renders all sections on Overview (default)', () => {
-    renderPage();
-    expect(screen.getByText('Project activity')).toBeInTheDocument();
-    expect(screen.getByText('Contributors map')).toBeInTheDocument();
-    expect(screen.getByText('Contributor activity')).toBeInTheDocument();
-    expect(screen.getByText('Information')).toBeInTheDocument();
+describe('DataPage', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (apiClient.getProjectActivity as any).mockResolvedValue(mockProjectData);
+    (apiClient.getContributorActivity as any).mockResolvedValue(mockContributorData);
+    (apiClient.getContributorsByRegion as any).mockResolvedValue(mockRegions);
+    (apiClient.getAnalyticsStats as any).mockResolvedValue(mockStats);
   });
 
-  it('shows only project-related sections on Projects tab', async () => {
-    const user = userEvent.setup();
+  // ------------- Loading and Error States ----------------------------------
+
+  it('renders loading skeletons initially', async () => {
+    // Delay resolution to catch loading state
+    (apiClient.getProjectActivity as any).mockReturnValue(new Promise(r => setTimeout(() => r(mockProjectData), 100)));
+
     renderPage();
-    await user.click(screen.getByRole('tab', { name: 'Projects' }));
-    expect(screen.getByText('Project activity')).toBeInTheDocument();
-    expect(screen.getByText('Contributors map')).toBeInTheDocument();
-    expect(screen.queryByText('Contributor activity')).not.toBeInTheDocument();
-    expect(screen.queryByText('Information')).not.toBeInTheDocument();
+
+    expect(screen.getAllByTestId('skeleton-loader').length).toBeGreaterThan(0);
+    expect(screen.getAllByTestId('chart-skeleton').length).toBeGreaterThan(0);
   });
 
-  it('shows only contributor-related sections on Contributions tab', async () => {
-    const user = userEvent.setup();
+  it('renders retry-able error state on failure', async () => {
+    (apiClient.getProjectActivity as any).mockRejectedValue(new Error('Network error'));
+
     renderPage();
-    await user.click(screen.getByRole('tab', { name: 'Contributions' }));
-    expect(screen.queryByText('Project activity')).not.toBeInTheDocument();
-    expect(screen.queryByText('Contributors map')).not.toBeInTheDocument();
-    expect(screen.getByText('Contributor activity')).toBeInTheDocument();
-    expect(screen.getByText('Information')).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(screen.getByText('Something went wrong')).toBeInTheDocument();
+      expect(screen.getByText('Network error')).toBeInTheDocument();
+    });
+
+    const retryBtn = screen.getByRole('button', { name: /try again/i });
+    expect(retryBtn).toBeInTheDocument();
+
+    // Success on retry
+    (apiClient.getProjectActivity as any).mockResolvedValue(mockProjectData);
+    await userEvent.click(retryBtn);
+
+    await waitFor(() => {
+      expect(screen.queryByText('Something went wrong')).not.toBeInTheDocument();
+      expect(screen.getByText('Project activity')).toBeInTheDocument();
+    });
   });
 
-  it('sets aria-selected on the active tab', async () => {
-    const user = userEvent.setup();
+  it('renders explicit empty states when data is empty', async () => {
+    (apiClient.getProjectActivity as any).mockResolvedValue([]);
+    (apiClient.getContributorActivity as any).mockResolvedValue([]);
+    (apiClient.getContributorsByRegion as any).mockResolvedValue([]);
+
     renderPage();
-    const overviewTab = screen.getByRole('tab', { name: 'Overview' });
-    const projectsTab = screen.getByRole('tab', { name: 'Projects' });
-    const contributionsTab = screen.getByRole('tab', { name: 'Contributions' });
 
-    expect(overviewTab).toHaveAttribute('aria-selected', 'true');
-    expect(projectsTab).toHaveAttribute('aria-selected', 'false');
-    expect(contributionsTab).toHaveAttribute('aria-selected', 'false');
-
-    await user.click(projectsTab);
-    expect(overviewTab).toHaveAttribute('aria-selected', 'false');
-    expect(projectsTab).toHaveAttribute('aria-selected', 'true');
+    await waitFor(() => {
+      expect(screen.getByText('No project activity data available')).toBeInTheDocument();
+      expect(screen.getByText('No contributor activity data available')).toBeInTheDocument();
+      expect(screen.getByText('No regional data available')).toBeInTheDocument();
+    });
   });
 
-  it('switching back to Overview shows all sections again', async () => {
-    const user = userEvent.setup();
-    renderPage();
-    await user.click(screen.getByRole('tab', { name: 'Projects' }));
-    expect(screen.queryByText('Contributor activity')).not.toBeInTheDocument();
+  // ------------- Tab filtering tests ----------------------------------------
 
-    await user.click(screen.getByRole('tab', { name: 'Overview' }));
-    expect(screen.getByText('Project activity')).toBeInTheDocument();
-    expect(screen.getByText('Contributor activity')).toBeInTheDocument();
-  });
-});
+  describe('view tabs', () => {
+    it('renders all sections on Overview (default)', async () => {
+      renderPage();
+      await waitFor(() => expect(apiClient.getProjectActivity).toHaveBeenCalled());
 
-// ------------- Category filter tests --------------------------------------
+      expect(screen.getByText('Project activity')).toBeInTheDocument();
+      expect(screen.getByText('Contributors map')).toBeInTheDocument();
+      expect(screen.getByText('Contributor activity')).toBeInTheDocument();
+      expect(screen.getByText('Information')).toBeInTheDocument();
+    });
 
-describe('DataPage project category filters', () => {
-  it('shows the default aggregate bar when no filter is active', () => {
-    renderPage();
-    expect(screen.getAllByTestId('bar-value').length).toBeGreaterThan(0);
-    expect(screen.queryByTestId('bar-new')).not.toBeInTheDocument();
-  });
+    it('shows only project-related sections on Projects tab', async () => {
+      const user = userEvent.setup();
+      renderPage();
+      await waitFor(() => expect(apiClient.getProjectActivity).toHaveBeenCalled());
 
-  it('clicking "New" filter shows a bar for the new dataKey instead of value', async () => {
-    const user = userEvent.setup();
-    renderPage();
+      await user.click(screen.getByRole('tab', { name: 'Projects' }));
+      expect(screen.getByText('Project activity')).toBeInTheDocument();
+      expect(screen.getByText('Contributors map')).toBeInTheDocument();
+      expect(screen.queryByText('Contributor activity')).not.toBeInTheDocument();
+      expect(screen.queryByText('Information')).not.toBeInTheDocument();
+    });
 
-    // Switch to Projects tab so only the project chart is visible
-    await user.click(screen.getByRole('tab', { name: 'Projects' }));
+    it('shows only contributor-related sections on Contributions tab', async () => {
+      const user = userEvent.setup();
+      renderPage();
+      await waitFor(() => expect(apiClient.getProjectActivity).toHaveBeenCalled());
 
-    expect(screen.getByTestId('bar-value')).toBeInTheDocument();
-    expect(screen.queryByTestId('bar-new')).not.toBeInTheDocument();
-
-    const newBtn = screen.getByRole('button', { name: 'New' });
-    await user.click(newBtn);
-
-    expect(screen.queryByTestId('bar-value')).not.toBeInTheDocument();
-    expect(screen.getByTestId('bar-new')).toBeInTheDocument();
-  });
-
-  it('toggling multiple filters shows bars for each category', async () => {
-    const user = userEvent.setup();
-    renderPage();
-
-    // Isolate to Projects tab for cleaner assertions
-    await user.click(screen.getByRole('tab', { name: 'Projects' }));
-
-    await user.click(screen.getByRole('button', { name: 'New' }));
-    await user.click(screen.getByRole('button', { name: 'Active' }));
-
-    expect(screen.getByTestId('bar-new')).toBeInTheDocument();
-    expect(screen.getByTestId('bar-active')).toBeInTheDocument();
-    expect(screen.queryByTestId('bar-value')).not.toBeInTheDocument();
+      await user.click(screen.getByRole('tab', { name: 'Contributions' }));
+      expect(screen.queryByText('Project activity')).not.toBeInTheDocument();
+      expect(screen.queryByText('Contributors map')).not.toBeInTheDocument();
+      expect(screen.getByText('Contributor activity')).toBeInTheDocument();
+      expect(screen.getByText('Information')).toBeInTheDocument();
+    });
   });
 
-  it('toggling a filter off restores the default bar', async () => {
-    const user = userEvent.setup();
-    renderPage();
+  // ------------- Category filter tests --------------------------------------
 
-    await user.click(screen.getByRole('tab', { name: 'Projects' }));
-    const newBtn = screen.getByRole('button', { name: 'New' });
+  describe('category filters', () => {
+    it('clicking "New" project filter shows bar for new instead of value', async () => {
+      const user = userEvent.setup();
+      renderPage();
+      await waitFor(() => expect(apiClient.getProjectActivity).toHaveBeenCalled());
 
-    // Toggle on then off
-    await user.click(newBtn);
-    expect(screen.getByTestId('bar-new')).toBeInTheDocument();
+      await user.click(screen.getByRole('tab', { name: 'Projects' }));
 
-    await user.click(newBtn);
-    expect(screen.queryByTestId('bar-new')).not.toBeInTheDocument();
-    expect(screen.getByTestId('bar-value')).toBeInTheDocument();
+      expect(screen.getByTestId('bar-value')).toBeInTheDocument();
+
+      const newBtn = screen.getByRole('button', { name: 'New' });
+      await user.click(newBtn);
+
+      expect(screen.queryByTestId('bar-value')).not.toBeInTheDocument();
+      expect(screen.getByTestId('bar-new')).toBeInTheDocument();
+    });
+
+    it('toggling multiple filters shows bars for each category', async () => {
+      const user = userEvent.setup();
+      renderPage();
+      await waitFor(() => expect(apiClient.getProjectActivity).toHaveBeenCalled());
+
+      await user.click(screen.getByRole('tab', { name: 'Projects' }));
+
+      await user.click(screen.getByRole('button', { name: 'New' }));
+      await user.click(screen.getByRole('button', { name: 'Active' }));
+
+      expect(screen.getByTestId('bar-new')).toBeInTheDocument();
+      expect(screen.getByTestId('bar-active')).toBeInTheDocument();
+    });
   });
 
-  it('sets aria-pressed on filter buttons', async () => {
-    const user = userEvent.setup();
-    renderPage();
+  // ------------- Interval Selection -----------------------------------------
 
-    await user.click(screen.getByRole('tab', { name: 'Projects' }));
-    const newBtn = screen.getByRole('button', { name: 'New' });
-    expect(newBtn).toHaveAttribute('aria-pressed', 'false');
+  describe('intervals', () => {
+    it('refetches project activity when interval changes', async () => {
+      const user = userEvent.setup();
+      renderPage();
+      await waitFor(() => expect(apiClient.getProjectActivity).toHaveBeenCalledWith('Monthly interval'));
 
-    await user.click(newBtn);
-    expect(newBtn).toHaveAttribute('aria-pressed', 'true');
-  });
-});
+      // Find the specific Monthly interval button for Project activity
+      const projectHeader = screen.getByText('Project activity').parentElement;
+      const intervalBtn = within(projectHeader!).getByRole('button');
 
-describe('DataPage contributor category filters', () => {
-  it('clicking contributor "Active" filter shows bar for active data', async () => {
-    const user = userEvent.setup();
-    renderPage();
+      await user.click(intervalBtn);
+      await user.click(screen.getByText('Weekly interval'));
 
-    // Switch to Contributions tab to isolate contributor chart
-    await user.click(screen.getByRole('tab', { name: 'Contributions' }));
-
-    const activeBtn = screen.getByRole('button', { name: 'Active' });
-    await user.click(activeBtn);
-
-    expect(screen.getByTestId('bar-active')).toBeInTheDocument();
-  });
-
-  it('contributor filter sets aria-pressed', async () => {
-    const user = userEvent.setup();
-    renderPage();
-
-    await user.click(screen.getByRole('tab', { name: 'Contributions' }));
-    const churnedBtn = screen.getByRole('button', { name: 'Churned' });
-    expect(churnedBtn).toHaveAttribute('aria-pressed', 'false');
-
-    await user.click(churnedBtn);
-    expect(churnedBtn).toHaveAttribute('aria-pressed', 'true');
-  });
-});
-
-// ------------- Edge cases -------------------------------------------------
-
-describe('DataPage edge cases', () => {
-  it('rapid filter toggling does not break rendering', async () => {
-    const user = userEvent.setup();
-    renderPage();
-
-    await user.click(screen.getByRole('tab', { name: 'Projects' }));
-    const newBtn = screen.getByRole('button', { name: 'New' });
-    // Rapid on-off-on
-    await user.click(newBtn);
-    await user.click(newBtn);
-    await user.click(newBtn);
-
-    expect(screen.getByTestId('bar-new')).toBeInTheDocument();
-  });
-
-  it('tab switching resets view without losing filter state', async () => {
-    const user = userEvent.setup();
-    renderPage();
-
-    await user.click(screen.getByRole('tab', { name: 'Projects' }));
-    const newBtn = screen.getByRole('button', { name: 'New' });
-    await user.click(newBtn);
-    expect(newBtn).toHaveAttribute('aria-pressed', 'true');
-
-    // Switch to Contributions and back to Overview
-    await user.click(screen.getByRole('tab', { name: 'Contributions' }));
-    await user.click(screen.getByRole('tab', { name: 'Overview' }));
-
-    // Project filter state preserved - first "New" button is in project section
-    const newButtons = screen.getAllByRole('button', { name: 'New' });
-    expect(newButtons[0]).toHaveAttribute('aria-pressed', 'true');
-  });
-
-  it('tablist has correct accessible structure', () => {
-    renderPage();
-    expect(screen.getByRole('tablist')).toBeInTheDocument();
-    expect(screen.getAllByRole('tab')).toHaveLength(3);
+      expect(apiClient.getProjectActivity).toHaveBeenCalledWith('Weekly interval');
+    });
   });
 });

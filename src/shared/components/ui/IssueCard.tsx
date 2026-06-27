@@ -24,7 +24,7 @@ export interface IssueCardProps {
   language?: string;
   daysLeft?: string;
   variant?: 'default' | 'recommended';
-  primaryTag?: string; // For the main tag (e.g., "good first issue", "bug")
+  primaryTag?: string | { name: string; color?: string }; // For the main tag
 }
 
 export function IssueCard({
@@ -43,14 +43,18 @@ export function IssueCard({
   daysLeft,
   variant = 'default',
   primaryTag,
-}: IssueCardProps) {
+  ...rest
+}: IssueCardProps & React.HTMLAttributes<HTMLElement>) {
   const { theme } = useTheme();
   const isDark = theme === 'dark';
 
   // Recommended Issue Variant
   if (variant === 'recommended') {
+    const tagObj = typeof primaryTag === 'string' ? { name: primaryTag } : primaryTag;
+
     return (
       <div 
+        {...rest}
         onClick={onClick}
         className={`backdrop-blur-[30px] rounded-[16px] border p-5 transition-all cursor-pointer ${
           isDark
@@ -62,21 +66,30 @@ export function IssueCard({
           <h4 className={`text-[16px] font-semibold leading-6 min-h-[3rem] line-clamp-2 transition-colors ${
             isDark ? 'text-[#f5f5f5]' : 'text-[#2d2820]'
           }`}>{title}</h4>
-          {primaryTag && (
-            <span className={`px-2.5 py-1 rounded-[8px] text-[11px] font-semibold whitespace-nowrap ml-2 ${
-              primaryTag === 'good first issue'
-                ? isDark
-                  ? 'bg-green-500/30 border border-green-500/50 text-green-300'
-                  : 'bg-green-500/20 border border-green-600/30 text-green-800'
-                : primaryTag === 'bug'
-                  ? isDark
-                    ? 'bg-red-500/30 border border-red-500/50 text-red-300'
-                    : 'bg-red-500/20 border border-red-600/30 text-red-800'
-                  : isDark
-                    ? 'bg-[#c9983a]/30 border border-[#c9983a]/50 text-[#e8c571]'
-                    : 'bg-[#c9983a]/20 border border-[#c9983a]/30 text-[#8b6f3a]'
-            }`}>
-              {primaryTag}
+          {tagObj && (
+            <span
+              className={`px-2.5 py-1 rounded-[8px] text-[11px] font-semibold whitespace-nowrap ml-2 ${
+                !tagObj.color ? (
+                  tagObj.name === 'good first issue'
+                    ? isDark
+                      ? 'bg-green-500/30 border border-green-500/50 text-green-300'
+                      : 'bg-green-500/20 border border-green-600/30 text-green-800'
+                    : tagObj.name === 'bug'
+                      ? isDark
+                        ? 'bg-red-500/30 border border-red-500/50 text-red-300'
+                        : 'bg-red-500/20 border border-red-600/30 text-red-800'
+                      : isDark
+                        ? 'bg-[#c9983a]/30 border border-[#c9983a]/50 text-[#e8c571]'
+                        : 'bg-[#c9983a]/20 border border-[#c9983a]/30 text-[#8b6f3a]'
+                ) : 'border border-black/10'
+              }`}
+              style={tagObj.color ? {
+                backgroundColor: `#${tagObj.color}33`,
+                color: `#${tagObj.color}`,
+                borderColor: `#${tagObj.color}4D`
+              } : undefined}
+            >
+              {tagObj.name}
             </span>
           )}
         </div>
@@ -105,6 +118,7 @@ export function IssueCard({
   // Default Issue Card Variant
   return (
     <button
+      {...rest}
       onClick={onClick}
       className={`w-full p-3 rounded-[16px] backdrop-blur-[40px] border transition-all text-left ${
         isSelected

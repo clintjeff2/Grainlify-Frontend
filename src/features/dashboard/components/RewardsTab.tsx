@@ -12,6 +12,12 @@ import {
 import { getProfileRewards, type ProfileReward } from "../../../shared/api/client";
 import { SkeletonLoader } from "../../../shared/components/SkeletonLoader";
 import { useTheme } from "../../../shared/contexts/ThemeContext";
+import { useLocalStorage } from "../../../shared/hooks/useLocalStorage";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "../../../app/components/ui/popover";
 
 type RewardRow = {
   id: string;
@@ -191,7 +197,17 @@ function RewardsSkeleton() {
 export function RewardsTab() {
   const { theme } = useTheme();
   const [isColumnsModalOpen, setIsColumnsModalOpen] = useState(false);
-  const [selectedColumns, setSelectedColumns] = useState<string[]>(columns);
+  const [selectedColumns, setSelectedColumns] = useLocalStorage<string[]>(
+    "rewards_selected_columns",
+    columns,
+    (raw) => {
+      if (!Array.isArray(raw)) return null;
+      const valid = (raw as unknown[]).filter(
+        (c): c is string => typeof c === "string" && columns.includes(c),
+      );
+      return valid.length > 0 ? valid : null;
+    },
+  );
   const [columnSearchQuery, setColumnSearchQuery] = useState("");
   const [state, setState] = useState<RewardsState>({ status: "loading" });
 
@@ -223,8 +239,7 @@ export function RewardsTab() {
   );
 
   return (
-    <>
-      <div className="space-y-4">
+    <div className="space-y-4">
         <div className="flex items-center gap-2 sm:gap-3">
           <button className="h-12 flex-shrink-0 w-10 sm:w-12 flex items-center justify-center rounded-[12px] backdrop-blur-[30px] bg-white/[0.15] border border-white/25 text-[#7a6b5a] hover:bg-white/[0.2] hover:border-[#c9983a]/40 transition-all">
             <Filter className="w-5 h-5" />
@@ -240,12 +255,94 @@ export function RewardsTab() {
           </div>
         </div>
 
-        <button
-          onClick={() => setIsColumnsModalOpen(!isColumnsModalOpen)}
-          className="w-full h-12 flex-shrink-0 sm:w-12 flex items-center justify-center rounded-[12px] backdrop-blur-[30px] bg-white/[0.15] border border-white/25 text-[#7a6b5a] hover:bg-white/[0.2] hover:border-[#c9983a]/40 transition-all"
-        >
-          <LayoutGrid className="w-5 h-5" />
-        </button>
+        <Popover open={isColumnsModalOpen} onOpenChange={setIsColumnsModalOpen}>
+          <PopoverTrigger asChild>
+            <button
+              aria-label="Toggle column visibility"
+              className="w-full h-12 flex-shrink-0 sm:w-12 flex items-center justify-center rounded-[12px] backdrop-blur-[30px] bg-white/[0.15] border border-white/25 text-[#7a6b5a] hover:bg-white/[0.2] hover:border-[#c9983a]/40 transition-all"
+            >
+              <LayoutGrid className="w-5 h-5" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent
+            align="end"
+            sideOffset={8}
+            className="w-[320px] p-0 backdrop-blur-[40px] bg-white/[0.12] rounded-[16px] border border-white/30 shadow-[0_20px_60px_rgba(0,0,0,0.25)] overflow-hidden"
+          >
+            <div className="px-5 py-4 border-b border-white/20">
+              <h3 className="text-[16px] font-bold text-[#2d2820]">
+                Rewards columns
+              </h3>
+            </div>
+
+            <div className="px-5 pt-4 pb-3">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#2d2820]" />
+                <input
+                  type="text"
+                  placeholder="Search"
+                  value={columnSearchQuery}
+                  onChange={(e) => setColumnSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2.5 rounded-[10px] backdrop-blur-[20px] bg-white/[0.2] border border-white/25 text-[#2d2820] text-[13px] placeholder-[#7a6b5a] focus:outline-none focus:bg-white/[0.25] focus:border-[#c9983a]/40 transition-all"
+                />
+              </div>
+            </div>
+
+            <div className="px-5 pb-4 max-h-[360px] overflow-y-auto scrollbar-hide">
+              <div className="space-y-2">
+                {visibleColumnOptions.map((column) => {
+                  const isSelected = selectedColumns.includes(column);
+                  return (
+                    <button
+                      key={column}
+                      onClick={() => {
+                        if (isSelected) {
+                          setSelectedColumns(
+                            selectedColumns.filter((c) => c !== column),
+                          );
+                        } else {
+                          setSelectedColumns([...selectedColumns, column]);
+                        }
+                      }}
+                      className={`w-full px-3.5 py-3 rounded-[10px] text-left text-[13px] font-medium transition-all flex items-center gap-3 backdrop-blur-[20px] bg-white/[0.15] border border-white/25 text-[#2d2820] hover:bg-white/[0.2] ${
+                        isSelected ? "hover:border-[#c9983a]/40" : ""
+                      }`}
+                    >
+                      <div
+                        className={`w-5 h-5 rounded-[6px] flex items-center justify-center border-2 transition-all ${
+                          isSelected
+                            ? "bg-[#c9983a] border-[#c9983a]"
+                            : "bg-white/30 border-[#7a6b5a]/40"
+                        }`}
+                      >
+                        {isSelected && (
+                          <Check className="w-3.5 h-3.5 text-white stroke-[3]" />
+                        )}
+                      </div>
+                      <span>{column}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="px-5 py-4 border-t border-white/20 flex items-center justify-between">
+              <button
+                onClick={() => setIsColumnsModalOpen(false)}
+                className="text-[13px] text-[#7a6b5a] hover:text-[#2d2820] transition-all font-medium"
+              >
+                Pending request
+              </button>
+              <button
+                onClick={() => setIsColumnsModalOpen(false)}
+                className="flex items-center gap-1.5 text-[13px] text-[#2d2820] hover:text-[#c9983a] transition-all font-semibold"
+              >
+                <Check className="w-4 h-4" />
+                <span>Complete</span>
+              </button>
+            </div>
+          </PopoverContent>
+        </Popover>
 
         {state.status === "loading" ? (
           <RewardsSkeleton />
@@ -329,85 +426,7 @@ export function RewardsTab() {
             </div>
           </>
         )}
-      </div>
-
-      {isColumnsModalOpen && (
-        <div className="fixed top-[140px] right-[40px] w-[320px] backdrop-blur-[40px] bg-white/[0.12] rounded-[16px] border border-white/30 z-50 shadow-[0_20px_60px_rgba(0,0,0,0.25)] overflow-hidden">
-          <div className="px-5 py-4 border-b border-white/20">
-            <h3 className="text-[16px] font-bold text-[#2d2820]">
-              Rewards columns
-            </h3>
-          </div>
-
-          <div className="px-5 pt-4 pb-3">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#2d2820]" />
-              <input
-                type="text"
-                placeholder="Search"
-                value={columnSearchQuery}
-                onChange={(e) => setColumnSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-3 py-2.5 rounded-[10px] backdrop-blur-[20px] bg-white/[0.2] border border-white/25 text-[#2d2820] text-[13px] placeholder-[#7a6b5a] focus:outline-none focus:bg-white/[0.25] focus:border-[#c9983a]/40 transition-all"
-              />
-            </div>
-          </div>
-
-          <div className="px-5 pb-4 max-h-[360px] overflow-y-auto scrollbar-hide">
-            <div className="space-y-2">
-              {visibleColumnOptions.map((column) => {
-                const isSelected = selectedColumns.includes(column);
-                return (
-                  <button
-                    key={column}
-                    onClick={() => {
-                      if (isSelected) {
-                        setSelectedColumns(
-                          selectedColumns.filter((c) => c !== column),
-                        );
-                      } else {
-                        setSelectedColumns([...selectedColumns, column]);
-                      }
-                    }}
-                    className={`w-full px-3.5 py-3 rounded-[10px] text-left text-[13px] font-medium transition-all flex items-center gap-3 backdrop-blur-[20px] bg-white/[0.15] border border-white/25 text-[#2d2820] hover:bg-white/[0.2] ${
-                      isSelected ? "hover:border-[#c9983a]/40" : ""
-                    }`}
-                  >
-                    <div
-                      className={`w-5 h-5 rounded-[6px] flex items-center justify-center border-2 transition-all ${
-                        isSelected
-                          ? "bg-[#c9983a] border-[#c9983a]"
-                          : "bg-white/30 border-[#7a6b5a]/40"
-                      }`}
-                    >
-                      {isSelected && (
-                        <Check className="w-3.5 h-3.5 text-white stroke-[3]" />
-                      )}
-                    </div>
-                    <span>{column}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="px-5 py-4 border-t border-white/20 flex items-center justify-between">
-            <button
-              onClick={() => setIsColumnsModalOpen(false)}
-              className="text-[13px] text-[#7a6b5a] hover:text-[#2d2820] transition-all font-medium"
-            >
-              Pending request
-            </button>
-            <button
-              onClick={() => setIsColumnsModalOpen(false)}
-              className="flex items-center gap-1.5 text-[13px] text-[#2d2820] hover:text-[#c9983a] transition-all font-semibold"
-            >
-              <Check className="w-4 h-4" />
-              <span>Complete</span>
-            </button>
-          </div>
-        </div>
-      )}
-    </>
+    </div>
   );
 }
 

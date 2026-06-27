@@ -136,3 +136,20 @@ All data files are located in `/src/features/settings/data/` for easy maintenanc
 - Grid layouts adjust for mobile, tablet, and desktop
 - Forms stack vertically on mobile
 - Profile cards use 1/2/3 column grids based on screen size
+
+## Form Validation & Accessibility
+
+### Profile Validation (Zod Schema)
+The profile form uses `react-hook-form` integrated with a Zod schema resolver (`profileSchema`) to enforce strict input length boundaries and URL formatting checks on the client:
+- **First Name / Last Name**: Optional, max 50 characters.
+- **Location**: Optional, max 100 characters.
+- **Website**: Optional, must start with `http://` or `https://` and have a valid hostname.
+- **Bio**: Optional, max 500 characters.
+- **Social Media Handles**: Optional, length-bounded to match maximum username lengths across platforms (Telegram: 32, LinkedIn: 100, WhatsApp: 20, Twitter: 15, Discord: 37).
+
+### Accessibility & ARIA Binding
+Inputs with validation constraints are explicitly configured for assistive technologies:
+- `aria-invalid` triggers automatically on fields with validation errors.
+- `aria-describedby` links the input element with its corresponding inline error message (marked with `role="alert"`), ensuring descriptive speech feedback for screen readers.
+- Submit action is disabled during background API request submission or when any form fields violate constraints.
+

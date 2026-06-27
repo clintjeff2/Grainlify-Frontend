@@ -120,7 +120,7 @@ describe('DashboardTab', () => {
 
     // Wait until the statistics cards are rendered, signaling that loading has finished.
     await waitFor(() => {
-      expect(screen.getByText('Repository Views')).toBeInTheDocument();
+      expect(screen.getByText('Issue Views')).toBeInTheDocument();
     });
 
     const activityElements = getActivityHeadings();
@@ -167,7 +167,7 @@ describe('DashboardTab', () => {
 
     // Wait until the statistics cards are rendered, signaling that loading has finished.
     await waitFor(() => {
-      expect(screen.getByText('Repository Views')).toBeInTheDocument();
+      expect(screen.getByText('Issue Views')).toBeInTheDocument();
     });
 
     const activityElements = getActivityHeadings();
@@ -210,7 +210,7 @@ describe('DashboardTab', () => {
 
     // Wait until the statistics cards are rendered, signaling that loading has finished.
     await waitFor(() => {
-      expect(screen.getByText('Repository Views')).toBeInTheDocument();
+      expect(screen.getByText('Issue Views')).toBeInTheDocument();
     });
 
     const activityElements = getActivityHeadings();
@@ -220,5 +220,110 @@ describe('DashboardTab', () => {
 
     expect(screen.getByText('1 hour ago')).toBeInTheDocument();
     expect(screen.getByText('unknown time')).toBeInTheDocument();
+  });
+
+  it('renders empty state with CTA when no projects are selected', async () => {
+    render(<DashboardTab selectedProjects={[]} isLoadingProjects={false} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('empty-state')).toBeInTheDocument();
+    });
+
+    expect(screen.getByText('No repository selected')).toBeInTheDocument();
+    expect(screen.getByText(/Select one or more repositories/i)).toBeInTheDocument();
+    // Should not show stat cards or skeletons
+    expect(screen.queryByText('Issue Views')).not.toBeInTheDocument();
+  });
+
+  it('renders a loading skeleton while the parent is still fetching projects', () => {
+    vi.mocked(getProjectIssues).mockResolvedValue({ issues: [] } as any);
+    vi.mocked(getProjectPRs).mockResolvedValue({ prs: [] } as any);
+
+    render(<DashboardTab selectedProjects={[]} isLoadingProjects={true} />);
+
+    // Empty state must not appear while projects are still loading
+    expect(screen.queryByTestId('empty-state')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('error-state')).not.toBeInTheDocument();
+  });
+
+  it('renders error state with retry button when the dashboard fetch throws', async () => {
+    // Both API calls throw so the outer loadData catch fires
+    vi.mocked(getProjectIssues).mockRejectedValue(new Error('network error'));
+    vi.mocked(getProjectPRs).mockRejectedValue(new Error('network error'));
+
+    render(<DashboardTab selectedProjects={mockProjects} isLoadingProjects={false} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('error-state')).toBeInTheDocument();
+    });
+
+    expect(screen.getByText('Failed to load dashboard')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /retry/i })).toBeInTheDocument();
+    // Stat cards must not appear
+    expect(screen.queryByText('Issue Views')).not.toBeInTheDocument();
+  });
+
+  it('retries loading data when the retry button is clicked', async () => {
+    vi.mocked(getProjectIssues).mockRejectedValueOnce(new Error('network error'));
+    vi.mocked(getProjectPRs).mockRejectedValueOnce(new Error('network error'));
+
+    // Second call succeeds
+    vi.mocked(getProjectIssues).mockResolvedValueOnce({ issues: [] } as any);
+    vi.mocked(getProjectPRs).mockResolvedValueOnce({ prs: [] } as any);
+
+    const { getByRole } = render(<DashboardTab selectedProjects={mockProjects} isLoadingProjects={false} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('error-state')).toBeInTheDocument();
+    });
+
+    getByRole('button', { name: /retry/i }).click();
+
+    await waitFor(() => {
+      expect(screen.getByText('Issue Views')).toBeInTheDocument();
+    });
+
+    expect(screen.queryByTestId('error-state')).not.toBeInTheDocument();
+  });
+
+  it('does not display a Repository Views card', async () => {
+    vi.mocked(getProjectIssues).mockResolvedValue({ issues: [] } as any);
+    vi.mocked(getProjectPRs).mockResolvedValue({ prs: [] } as any);
+
+    render(<DashboardTab selectedProjects={mockProjects} isLoadingProjects={false} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Issue Views')).toBeInTheDocument();
+    });
+
+    expect(screen.queryByText('Repository Views')).not.toBeInTheDocument();
+  });
+
+  it('validates stat values — renders 0 for stats that would produce invalid numbers', async () => {
+    vi.mocked(getProjectIssues).mockResolvedValue({
+      issues: [
+        {
+          github_issue_id: 1,
+          number: 1,
+          title: 'Issue with bad comment count',
+          comments_count: NaN,
+          projectId: 'proj-1',
+          updated_at: '2026-06-23T11:00:00Z',
+        }
+      ] as any
+    });
+    vi.mocked(getProjectPRs).mockResolvedValue({ prs: [] } as any);
+
+    render(<DashboardTab selectedProjects={mockProjects} isLoadingProjects={false} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Issue Views')).toBeInTheDocument();
+    });
+
+    // Issue Applications should clamp NaN comments_count to 0
+    const applicationsHeading = screen.getByText('Issue Applications');
+    const card = applicationsHeading.closest('[class*="rounded"]');
+    // The value displayed in the card should be 0 (not NaN)
+    expect(card).toHaveTextContent('0');
   });
 });

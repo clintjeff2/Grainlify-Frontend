@@ -1,11 +1,13 @@
 import { logger } from '../../../../shared/utils/logger';
 import { useState, useEffect, useCallback } from 'react';
-import { Search, AlertCircle } from 'lucide-react';
+import { Search, AlertCircle, ShieldOff } from 'lucide-react';
 import { useTheme } from '../../../../shared/contexts/ThemeContext';
+import { useAuth } from '../../../../shared/contexts/AuthContext';
+import { useOptimisticData } from '../../../../shared/hooks/useOptimisticData';
 import { PRFilterType } from '../../types';
 import { PRRow } from './PRRow';
 import { PRFilterDropdown } from './PRFilterDropdown';
-import { getProjectPRs } from '../../../../shared/api/client';
+import { getMaintainerPRs } from '../../../../shared/api/client';
 import { PRRowSkeleton } from '../../../../shared/components/PRRowSkeleton';
 
 interface PRFromAPI {
@@ -73,40 +75,57 @@ function getEmptyStateKind({
 
 export function PullRequestsTab({ selectedProjects }: PullRequestsTabProps) {
   const { theme } = useTheme();
+  const { userRole } = useAuth();
+  const isAuthorized = userRole === 'maintainer' || userRole === 'admin';
+
   const [searchQuery, setSearchQuery] = useState('');
   const [filter, setFilter] = useState<PRFilterType>('All states');
   const [isFilterDropdownOpen, setIsFilterDropdownOpen] = useState(false);
-  const [prs, setPrs] = useState<Array<PRFromAPI & { projectName: string }>>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+
+  const {
+    data: prs,
+    isLoading,
+    hasError,
+    error,
+    retry,
+    fetchData,
+  } = useOptimisticData<Array<PRFromAPI & { projectName: string }>>([], {
+    cacheKey: `maintainer-prs-${selectedProjects.map((p) => p.id).join(',')}`,
+    cacheDuration: 30000,
+  });
 
   const loadPRs = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
+    if (!isAuthorized) return;
+    await fetchData(async (signal) => {
       if (selectedProjects.length === 0) {
-        setPrs([]);
-        setIsLoading(false);
-        return;
+        return [];
       }
 
       // Fetch PRs from all selected projects in parallel
+      let successCount = 0;
+      let lastError: any = null;
+
       const prPromises = selectedProjects.map(async (project: Project) => {
         try {
-          const response = await getProjectPRs(project.id);
+          const response = await getMaintainerPRs(project.id, { signal });
+          successCount++;
           return (response.prs || []).map((pr: PRFromAPI) => ({
             ...pr,
             projectName: project.github_full_name,
           }));
         } catch (err) {
           logger.error(`Failed to fetch PRs for ${project.github_full_name}:`, err);
+          lastError = err;
           return [];
         }
       });
 
       const allPRs = await Promise.all(prPromises);
+      if (selectedProjects.length > 0 && successCount === 0 && lastError) {
+        throw lastError;
+      }
       const flattenedPRs = allPRs.flat();
-      
+
       // Sort by updated_at (most recent first)
       flattenedPRs.sort((a, b) => {
         const dateA = a.updated_at ? new Date(a.updated_at).getTime() : new Date(a.last_seen_at).getTime();
@@ -114,15 +133,9 @@ export function PullRequestsTab({ selectedProjects }: PullRequestsTabProps) {
         return dateB - dateA;
       });
 
-      setPrs(flattenedPRs);
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to load pull requests';
-      setError(errorMessage);
-      setPrs([]);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [selectedProjects]);
+      return flattenedPRs;
+    });
+  }, [selectedProjects, fetchData, isAuthorized]);
 
   // Fetch PRs from selected projects
   useEffect(() => {
@@ -146,12 +159,32 @@ export function PullRequestsTab({ selectedProjects }: PullRequestsTabProps) {
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('repositories-refreshed', handleRepositoriesRefreshed);
-    
+
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('repositories-refreshed', handleRepositoriesRefreshed);
     };
   }, [loadPRs]);
+
+  if (!isAuthorized) {
+    return (
+      <div className={`backdrop-blur-[40px] rounded-[24px] border p-8 flex flex-col items-center justify-center text-center transition-colors ${
+        theme === 'dark'
+          ? 'bg-[#2d2820]/[0.4] border-white/10'
+          : 'bg-white/[0.12] border-white/20'
+      }`}>
+        <ShieldOff className="w-16 h-16 text-red-500/70 mb-4" strokeWidth={1.5} />
+        <h3 className={`text-[20px] font-bold mb-2 transition-colors ${
+          theme === 'dark' ? 'text-[#e8dfd0]' : 'text-[#2d2820]'
+        }`}>Access Restricted</h3>
+        <p className={`text-[14px] max-w-md transition-colors ${
+          theme === 'dark' ? 'text-[#b8a898]' : 'text-[#7a6b5a]'
+        }`}>
+          You must be a project maintainer or admin to access pull request data.
+        </p>
+      </div>
+    );
+  }
 
   // Filter PRs based on search and filter
   const filteredPRs = prs.filter(pr => {
@@ -281,14 +314,29 @@ export function PullRequestsTab({ selectedProjects }: PullRequestsTabProps) {
               <PRRowSkeleton key={idx} />
             ))}
           </div>
-        ) : error ? (
-          <div className={`flex items-center gap-3 px-6 py-4 mx-4 rounded-[12px] ${
+        ) : hasError ? (
+          <div className={`flex flex-col items-center gap-3 px-6 py-6 mx-4 rounded-[16px] border transition-colors ${
             theme === 'dark'
-              ? 'bg-red-500/10 border border-red-500/30 text-red-400'
-              : 'bg-red-100 border border-red-300 text-red-700'
+              ? 'bg-red-500/10 border-red-500/20 text-red-400'
+              : 'bg-red-100/50 border-red-300/40 text-red-700'
           }`}>
-            <AlertCircle className="w-5 h-5 flex-shrink-0" />
-            <span className="text-[14px] font-medium">{error}</span>
+            <AlertCircle className="w-8 h-8 flex-shrink-0" />
+            <div className="text-center">
+              <p className="text-[14px] font-semibold mb-1">Failed to load pull requests</p>
+              <p className="text-[12px] opacity-80 mb-3">
+                {error instanceof Error ? error.message : typeof error === 'string' ? error : 'An unknown error occurred'}
+              </p>
+              <button
+                onClick={retry}
+                className={`px-4 py-2 rounded-[10px] text-[12px] font-bold border transition-all ${
+                  theme === 'dark'
+                    ? 'bg-white/10 hover:bg-white/15 border-white/20 text-white'
+                    : 'bg-white hover:bg-white/50 border-gray-300 text-gray-800'
+                }`}
+              >
+                Retry Connection
+              </button>
+            </div>
           </div>
         ) : filteredPRs.length > 0 ? (
           filteredPRs.map((pr) => {

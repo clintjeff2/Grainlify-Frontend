@@ -1,23 +1,16 @@
 import { useState, useEffect } from 'react';
 import { useForm, Controller } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
 import { X, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { useTheme } from '../../../shared/contexts/ThemeContext';
 import { createProject, getEcosystems } from '../../../shared/api/client';
 import { SkeletonLoader } from '../../../shared/components/SkeletonLoader';
-import { validateRepoName, validateRequired } from '../../../shared/utils/validation';
+import { addRepositorySchema, AddRepositoryFormData } from './addRepositorySchema';
 
 interface AddRepositoryModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
-}
-
-interface FormData {
-  githubFullName: string;
-  ecosystemName: string;
-  language: string;
-  tags: string;
-  category: string;
 }
 
 export function AddRepositoryModal({ isOpen, onClose, onSuccess }: AddRepositoryModalProps) {
@@ -31,7 +24,8 @@ export function AddRepositoryModal({ isOpen, onClose, onSuccess }: AddRepository
     reset,
     trigger,
     formState: { errors, isValid },
-  } = useForm<FormData>({
+  } = useForm<AddRepositoryFormData>({
+    resolver: zodResolver(addRepositorySchema),
     mode: 'onChange',
     defaultValues: {
       githubFullName: '',
@@ -74,13 +68,13 @@ export function AddRepositoryModal({ isOpen, onClose, onSuccess }: AddRepository
     }
   };
 
-  const onSubmit = async (data: FormData) => {
+  const onSubmit = async (data: AddRepositoryFormData) => {
     setError(null);
     setSuccess(false);
     setIsSubmitting(true);
 
     try {
-      const tagsArray = data.tags
+      const tagsArray = (data.tags || '')
         .split(',')
         .map(tag => tag.trim())
         .filter(tag => tag.length > 0);
@@ -88,9 +82,9 @@ export function AddRepositoryModal({ isOpen, onClose, onSuccess }: AddRepository
       await createProject({
         github_full_name: data.githubFullName.trim(),
         ecosystem_name: data.ecosystemName,
-        language: data.language.trim() || undefined,
+        language: data.language?.trim() || undefined,
         tags: tagsArray.length > 0 ? tagsArray : undefined,
-        category: data.category.trim() || undefined,
+        category: data.category?.trim() || undefined,
       });
 
       setSuccess(true);
@@ -194,7 +188,7 @@ export function AddRepositoryModal({ isOpen, onClose, onSuccess }: AddRepository
             <input
               id="github-fullname-input"
               type="text"
-              {...register('githubFullName', { validate: validateRepoName })}
+              {...register('githubFullName')}
               placeholder="owner/repo (e.g., facebook/react)"
               disabled={isSubmitting}
               maxLength={140}
@@ -229,9 +223,12 @@ export function AddRepositoryModal({ isOpen, onClose, onSuccess }: AddRepository
 
           {/* Ecosystem */}
           <div>
-            <label className={`block text-[14px] font-semibold mb-2 transition-colors ${
-              darkTheme ? 'text-[#e8dfd0]' : 'text-[#2d2820]'
-            }`}>
+            <label 
+              htmlFor="ecosystem-select"
+              className={`block text-[14px] font-semibold mb-2 transition-colors ${
+                darkTheme ? 'text-[#e8dfd0]' : 'text-[#2d2820]'
+              }`}
+            >
               Ecosystem <span className="text-red-500">*</span>
             </label>
             {isLoadingEcosystems ? (
@@ -240,11 +237,13 @@ export function AddRepositoryModal({ isOpen, onClose, onSuccess }: AddRepository
               <Controller
                 name="ecosystemName"
                 control={control}
-                rules={{ validate: (v) => validateRequired(v, 'Ecosystem') }}
                 render={({ field }) => (
                   <select
+                    id="ecosystem-select"
                     {...field}
                     disabled={isSubmitting || ecosystems.length === 0}
+                    aria-invalid={!!errors.ecosystemName}
+                    aria-describedby={errors.ecosystemName ? "ecosystem-error" : undefined}
                     className={`w-full px-4 py-3 rounded-[12px] border-2 transition-all ${
                       darkTheme
                         ? 'bg-white/10 border-white/20 text-[#e8dfd0] focus:border-[#c9983a] focus:bg-white/15'
@@ -262,7 +261,15 @@ export function AddRepositoryModal({ isOpen, onClose, onSuccess }: AddRepository
               />
             )}
             {errors.ecosystemName && (
-              <p className="mt-1.5 text-[12px] text-red-500">{errors.ecosystemName.message}</p>
+              <p
+                id="ecosystem-error"
+                role="alert"
+                className={`mt-1.5 text-[12px] font-medium transition-colors ${
+                  darkTheme ? 'text-red-400' : 'text-red-600'
+                }`}
+              >
+                {errors.ecosystemName.message}
+              </p>
             )}
           </div>
 

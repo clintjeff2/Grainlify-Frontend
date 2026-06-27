@@ -2,7 +2,7 @@ import { SkeletonLoader } from './SkeletonLoader';
 
 export function ChartSkeleton() {
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-testid="chart-skeleton">
       {/* Chart Title Skeleton */}
       <div className="space-y-2">
         <SkeletonLoader variant="text" width="200px" height="24px" />
@@ -43,18 +43,3 @@ export function ChartSkeleton() {
     </div>
   );
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

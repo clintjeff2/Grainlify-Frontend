@@ -1,11 +1,12 @@
 import { logger } from '../../../../shared/utils/logger';
 import { useState, useEffect, useRef } from 'react';
 import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
 import { Github, User, Upload, Link as LinkIcon } from 'lucide-react';
 import { useTheme } from '../../../../shared/contexts/ThemeContext';
 import { getCurrentUser, updateProfile, updateAvatar, resyncGitHubProfile } from '../../../../shared/api/client';
 import { toast } from 'sonner';
-import { validateUrl } from '../../../../shared/utils/validation';
+import { profileSchema, ProfileFormData } from './profileSchema';
 
 interface CurrentUser {
   id: string;
@@ -32,19 +33,6 @@ interface CurrentUser {
   };
 }
 
-interface ProfileFormData {
-  firstName: string;
-  lastName: string;
-  location: string;
-  website: string;
-  bio: string;
-  telegram: string;
-  linkedin: string;
-  whatsapp: string;
-  twitter: string;
-  discord: string;
-}
-
 export function ProfileTab() {
   const { theme } = useTheme();
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
@@ -59,6 +47,7 @@ export function ProfileTab() {
     reset,
     formState: { errors, isDirty, isValid },
   } = useForm<ProfileFormData>({
+    resolver: zodResolver(profileSchema),
     mode: 'onBlur',
     defaultValues: {
       firstName: '',
@@ -395,81 +384,108 @@ export function ProfileTab() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* First Name */}
           <div>
-            <label className={`block text-[14px] font-semibold mb-2 transition-colors ${theme === 'dark' ? 'text-[#f5efe5]' : 'text-[#2d2820]'
+            <label htmlFor="first-name-input" className={`block text-[14px] font-semibold mb-2 transition-colors ${theme === 'dark' ? 'text-[#f5efe5]' : 'text-[#2d2820]'
               }`}>First Name</label>
             <input
+              id="first-name-input"
               type="text"
               placeholder="Enter your first name"
               {...register('firstName')}
+              aria-invalid={!!errors.firstName}
+              aria-describedby={errors.firstName ? 'first-name-error' : undefined}
               className={`w-full px-4 py-3 rounded-[14px] backdrop-blur-[30px] border focus:outline-none focus:bg-white/[0.2] focus:border-[#c9983a]/30 transition-all text-[14px] ${theme === 'dark'
                 ? 'bg-[#3d342c]/[0.4] border-white/15 text-[#f5efe5] placeholder-[#b8a898]'
                 : 'bg-white/[0.15] border-white/25 text-[#2d2820] placeholder-[#7a6b5a]'
-                }`}
+                } ${errors.firstName ? 'border-red-500/50' : ''}`}
             />
+            {errors.firstName && (
+              <p id="first-name-error" role="alert" className="mt-1.5 text-[12px] text-red-500">{errors.firstName.message}</p>
+            )}
           </div>
 
           {/* Last Name */}
           <div>
-            <label className={`block text-[14px] font-semibold mb-2 transition-colors ${theme === 'dark' ? 'text-[#f5efe5]' : 'text-[#2d2820]'
+            <label htmlFor="last-name-input" className={`block text-[14px] font-semibold mb-2 transition-colors ${theme === 'dark' ? 'text-[#f5efe5]' : 'text-[#2d2820]'
               }`}>Last Name</label>
             <input
+              id="last-name-input"
               type="text"
               placeholder="Enter your last name"
               {...register('lastName')}
+              aria-invalid={!!errors.lastName}
+              aria-describedby={errors.lastName ? 'last-name-error' : undefined}
               className={`w-full px-4 py-3 rounded-[14px] backdrop-blur-[30px] border focus:outline-none focus:bg-white/[0.2] focus:border-[#c9983a]/30 transition-all text-[14px] ${theme === 'dark'
                 ? 'bg-[#3d342c]/[0.4] border-white/15 text-[#f5efe5] placeholder-[#b8a898]'
                 : 'bg-white/[0.15] border-white/25 text-[#2d2820] placeholder-[#7a6b5a]'
-                }`}
+                } ${errors.lastName ? 'border-red-500/50' : ''}`}
             />
+            {errors.lastName && (
+              <p id="last-name-error" role="alert" className="mt-1.5 text-[12px] text-red-500">{errors.lastName.message}</p>
+            )}
           </div>
 
           {/* Location */}
           <div>
-            <label className={`block text-[14px] font-semibold mb-2 transition-colors ${theme === 'dark' ? 'text-[#f5efe5]' : 'text-[#2d2820]'
+            <label htmlFor="location-input" className={`block text-[14px] font-semibold mb-2 transition-colors ${theme === 'dark' ? 'text-[#f5efe5]' : 'text-[#2d2820]'
               }`}>Location</label>
             <input
+              id="location-input"
               type="text"
               placeholder="Enter your location"
               {...register('location')}
+              aria-invalid={!!errors.location}
+              aria-describedby={errors.location ? 'location-error' : undefined}
               className={`w-full px-4 py-3 rounded-[14px] backdrop-blur-[30px] border focus:outline-none focus:bg-white/[0.2] focus:border-[#c9983a]/30 transition-all text-[14px] ${theme === 'dark'
                 ? 'bg-[#3d342c]/[0.4] border-white/15 text-[#f5efe5] placeholder-[#b8a898]'
                 : 'bg-white/[0.15] border-white/25 text-[#2d2820] placeholder-[#7a6b5a]'
-                }`}
+                } ${errors.location ? 'border-red-500/50' : ''}`}
             />
+            {errors.location && (
+              <p id="location-error" role="alert" className="mt-1.5 text-[12px] text-red-500">{errors.location.message}</p>
+            )}
           </div>
 
           {/* Website */}
           <div>
-            <label className={`block text-[14px] font-semibold mb-2 transition-colors ${theme === 'dark' ? 'text-[#f5efe5]' : 'text-[#2d2820]'
+            <label htmlFor="website-input" className={`block text-[14px] font-semibold mb-2 transition-colors ${theme === 'dark' ? 'text-[#f5efe5]' : 'text-[#2d2820]'
               }`}>Website</label>
             <input
+              id="website-input"
               type="text"
               placeholder="Enter your website"
-              {...register('website', { validate: validateUrl })}
+              {...register('website')}
+              aria-invalid={!!errors.website}
+              aria-describedby={errors.website ? 'website-error' : undefined}
               className={`w-full px-4 py-3 rounded-[14px] backdrop-blur-[30px] border focus:outline-none focus:bg-white/[0.2] focus:border-[#c9983a]/30 transition-all text-[14px] ${theme === 'dark'
                 ? 'bg-[#3d342c]/[0.4] border-white/15 text-[#f5efe5] placeholder-[#b8a898]'
                 : 'bg-white/[0.15] border-white/25 text-[#2d2820] placeholder-[#7a6b5a]'
                 } ${errors.website ? 'border-red-500/50' : ''}`}
             />
             {errors.website && (
-              <p className="mt-1.5 text-[12px] text-red-500">{errors.website.message}</p>
+              <p id="website-error" role="alert" className="mt-1.5 text-[12px] text-red-500">{errors.website.message}</p>
             )}
           </div>
         </div>
 
         {/* Bio */}
         <div className="mt-6">
-          <label className={`block text-[14px] font-semibold mb-2 transition-colors ${theme === 'dark' ? 'text-[#f5efe5]' : 'text-[#2d2820]'
+          <label htmlFor="bio-input" className={`block text-[14px] font-semibold mb-2 transition-colors ${theme === 'dark' ? 'text-[#f5efe5]' : 'text-[#2d2820]'
             }`}>Bio</label>
           <textarea
+            id="bio-input"
             placeholder="Enter your bio"
             rows={4}
             {...register('bio')}
+            aria-invalid={!!errors.bio}
+            aria-describedby={errors.bio ? 'bio-error' : undefined}
             className={`w-full px-4 py-3 rounded-[14px] backdrop-blur-[30px] border focus:outline-none focus:bg-white/[0.2] focus:border-[#c9983a]/30 transition-all text-[14px] resize-none ${theme === 'dark'
               ? 'bg-[#3d342c]/[0.4] border-white/15 text-[#f5efe5] placeholder-[#b8a898]'
               : 'bg-white/[0.15] border-white/25 text-[#2d2820] placeholder-[#7a6b5a]'
-              }`}
+              } ${errors.bio ? 'border-red-500/50' : ''}`}
           />
+          {errors.bio && (
+            <p id="bio-error" role="alert" className="mt-1.5 text-[12px] text-red-500">{errors.bio.message}</p>
+          )}
         </div>
       </div>
 
@@ -488,97 +504,127 @@ export function ProfileTab() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Telegram */}
           <div>
-            <label className={`block text-[14px] font-semibold mb-2 transition-colors ${theme === 'dark' ? 'text-[#f5efe5]' : 'text-[#2d2820]'
+            <label htmlFor="telegram-input" className={`block text-[14px] font-semibold mb-2 transition-colors ${theme === 'dark' ? 'text-[#f5efe5]' : 'text-[#2d2820]'
               }`}>Telegram</label>
             <div className="relative">
               <input
+                id="telegram-input"
                 type="text"
                 {...register('telegram')}
                 placeholder="Enter your telegram handle"
+                aria-invalid={!!errors.telegram}
+                aria-describedby={errors.telegram ? 'telegram-error' : undefined}
                 className={`w-full px-4 py-3 pr-10 rounded-[14px] backdrop-blur-[30px] border focus:outline-none focus:bg-white/[0.2] focus:border-[#c9983a]/30 transition-all text-[14px] ${theme === 'dark'
                   ? 'bg-[#3d342c]/[0.4] border-white/15 text-[#f5efe5] placeholder-[#b8a898]'
                   : 'bg-white/[0.15] border-white/25 text-[#2d2820] placeholder-[#7a6b5a]'
-                  }`}
+                  } ${errors.telegram ? 'border-red-500/50' : ''}`}
               />
               <LinkIcon className={`absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors ${theme === 'dark' ? 'text-[#8a7e70]' : 'text-[#7a6b5a]'
                 }`} />
             </div>
+            {errors.telegram && (
+              <p id="telegram-error" role="alert" className="mt-1.5 text-[12px] text-red-500">{errors.telegram.message}</p>
+            )}
           </div>
 
           {/* LinkedIn */}
           <div>
-            <label className={`block text-[14px] font-semibold mb-2 transition-colors ${theme === 'dark' ? 'text-[#f5efe5]' : 'text-[#2d2820]'
+            <label htmlFor="linkedin-input" className={`block text-[14px] font-semibold mb-2 transition-colors ${theme === 'dark' ? 'text-[#f5efe5]' : 'text-[#2d2820]'
               }`}>LinkedIn</label>
             <div className="relative">
               <input
+                id="linkedin-input"
                 type="text"
                 {...register('linkedin')}
                 placeholder="Enter your linkedin handle"
+                aria-invalid={!!errors.linkedin}
+                aria-describedby={errors.linkedin ? 'linkedin-error' : undefined}
                 className={`w-full px-4 py-3 pr-10 rounded-[14px] backdrop-blur-[30px] border focus:outline-none focus:bg-white/[0.2] focus:border-[#c9983a]/30 transition-all text-[14px] ${theme === 'dark'
                   ? 'bg-[#3d342c]/[0.4] border-white/15 text-[#f5efe5] placeholder-[#b8a898]'
                   : 'bg-white/[0.15] border-white/25 text-[#2d2820] placeholder-[#7a6b5a]'
-                  }`}
+                  } ${errors.linkedin ? 'border-red-500/50' : ''}`}
               />
               <LinkIcon className={`absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors ${theme === 'dark' ? 'text-[#b8a898]' : 'text-[#7a6b5a]'
                 }`} />
             </div>
+            {errors.linkedin && (
+              <p id="linkedin-error" role="alert" className="mt-1.5 text-[12px] text-red-500">{errors.linkedin.message}</p>
+            )}
           </div>
 
           {/* WhatsApp */}
           <div>
-            <label className={`block text-[14px] font-semibold mb-2 transition-colors ${theme === 'dark' ? 'text-[#f5efe5]' : 'text-[#2d2820]'
+            <label htmlFor="whatsapp-input" className={`block text-[14px] font-semibold mb-2 transition-colors ${theme === 'dark' ? 'text-[#f5efe5]' : 'text-[#2d2820]'
               }`}>WhatsApp</label>
             <div className="relative">
               <input
+                id="whatsapp-input"
                 type="text"
                 {...register('whatsapp')}
                 placeholder="Enter your whatsApp handle"
+                aria-invalid={!!errors.whatsapp}
+                aria-describedby={errors.whatsapp ? 'whatsapp-error' : undefined}
                 className={`w-full px-4 py-3 pr-10 rounded-[14px] backdrop-blur-[30px] border focus:outline-none focus:bg-white/[0.2] focus:border-[#c9983a]/30 transition-all text-[14px] ${theme === 'dark'
                   ? 'bg-[#3d342c]/[0.4] border-white/15 text-[#f5efe5] placeholder-[#b8a898]'
                   : 'bg-white/[0.15] border-white/25 text-[#2d2820] placeholder-[#7a6b5a]'
-                  }`}
+                  } ${errors.whatsapp ? 'border-red-500/50' : ''}`}
               />
               <LinkIcon className={`absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors ${theme === 'dark' ? 'text-[#b8a898]' : 'text-[#7a6b5a]'
                 }`} />
             </div>
+            {errors.whatsapp && (
+              <p id="whatsapp-error" role="alert" className="mt-1.5 text-[12px] text-red-500">{errors.whatsapp.message}</p>
+            )}
           </div>
 
           {/* Twitter */}
           <div>
-            <label className={`block text-[14px] font-semibold mb-2 transition-colors ${theme === 'dark' ? 'text-[#f5efe5]' : 'text-[#2d2820]'
+            <label htmlFor="twitter-input" className={`block text-[14px] font-semibold mb-2 transition-colors ${theme === 'dark' ? 'text-[#f5efe5]' : 'text-[#2d2820]'
               }`}>Twitter</label>
             <div className="relative">
               <input
+                id="twitter-input"
                 type="text"
                 {...register('twitter')}
                 placeholder="Enter your twitter handle"
+                aria-invalid={!!errors.twitter}
+                aria-describedby={errors.twitter ? 'twitter-error' : undefined}
                 className={`w-full px-4 py-3 pr-10 rounded-[14px] backdrop-blur-[30px] border focus:outline-none focus:bg-white/[0.2] focus:border-[#c9983a]/30 transition-all text-[14px] ${theme === 'dark'
                   ? 'bg-[#3d342c]/[0.4] border-white/15 text-[#f5efe5] placeholder-[#b8a898]'
                   : 'bg-white/[0.15] border-white/25 text-[#2d2820] placeholder-[#7a6b5a]'
-                  }`}
+                  } ${errors.twitter ? 'border-red-500/50' : ''}`}
               />
               <LinkIcon className={`absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors ${theme === 'dark' ? 'text-[#b8a898]' : 'text-[#7a6b5a]'
                 }`} />
             </div>
+            {errors.twitter && (
+              <p id="twitter-error" role="alert" className="mt-1.5 text-[12px] text-red-500">{errors.twitter.message}</p>
+            )}
           </div>
 
           {/* Discord - Full Width */}
           <div className="md:col-span-2">
-            <label className={`block text-[14px] font-semibold mb-2 transition-colors ${theme === 'dark' ? 'text-[#f5efe5]' : 'text-[#2d2820]'
+            <label htmlFor="discord-input" className={`block text-[14px] font-semibold mb-2 transition-colors ${theme === 'dark' ? 'text-[#f5efe5]' : 'text-[#2d2820]'
               }`}>Discord</label>
             <div className="relative">
               <input
+                id="discord-input"
                 type="text"
                 {...register('discord')}
                 placeholder="Enter your discord handle"
+                aria-invalid={!!errors.discord}
+                aria-describedby={errors.discord ? 'discord-error' : undefined}
                 className={`w-full px-4 py-3 pr-10 rounded-[14px] backdrop-blur-[30px] border focus:outline-none focus:bg-white/[0.2] focus:border-[#c9983a]/30 transition-all text-[14px] ${theme === 'dark'
                   ? 'bg-[#3d342c]/[0.4] border-white/15 text-[#f5efe5] placeholder-[#b8a898]'
                   : 'bg-white/[0.15] border-white/25 text-[#2d2820] placeholder-[#7a6b5a]'
-                  }`}
+                  } ${errors.discord ? 'border-red-500/50' : ''}`}
               />
               <LinkIcon className={`absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors ${theme === 'dark' ? 'text-[#b8a898]' : 'text-[#7a6b5a]'
                 }`} />
             </div>
+            {errors.discord && (
+              <p id="discord-error" role="alert" className="mt-1.5 text-[12px] text-red-500">{errors.discord.message}</p>
+            )}
           </div>
         </div>
       </div>

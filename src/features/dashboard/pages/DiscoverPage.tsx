@@ -1,4 +1,4 @@
-import { logger } from '../../../shared/utils/logger';
+﻿import { logger } from '../../../shared/utils/logger';
 import { useTheme } from "../../../shared/contexts/ThemeContext";
 import { Heart, Star, GitFork, ArrowUpRight, Target, Zap } from "lucide-react";
 import { IssueCard } from "../../../shared/components/ui/IssueCard";
@@ -26,7 +26,7 @@ const formatNumber = (num: number): string => {
 // Helper function to get project icon/avatar
 const getProjectIcon = (githubFullName: string): string => {
   const [owner] = githubFullName.split("/");
-  // Use higher‑resolution owner avatar so cards look crisp
+  // Use higherâ€‘resolution owner avatar so cards look crisp
   return `https://github.com/${owner}.png?size=200`;
 };
 
@@ -104,36 +104,66 @@ const cleanIssueDescription = (
   return selectedLines;
 };
 
-// Helper function to calculate days left (mock for now, can be enhanced with actual dates)
-const getDaysLeft = (): string => {
-  const days = Math.floor(Math.random() * 10) + 1;
-  return `${days} days left`;
+/**
+ * Helper function to calculate days left from a deadline date string or timestamp.
+ * Returns formatted remaining time, or null if no deadline is available or invalid.
+ *
+ * @param deadline - The ISO date string or timestamp for the deadline
+ * @param now - The current anchor date (defaults to new Date())
+ * @returns Formatted remaining time string (e.g., "3 days left", "Today", "Overdue"), or null
+ */
+export const getDaysLeft = (
+  deadline: string | number | null | undefined,
+  now: Date = new Date()
+): string | null => {
+  if (deadline === undefined || deadline === null) {
+    return null;
+  }
+
+  const deadlineDate = new Date(deadline);
+  
+  // Guard against NaN/Invalid Date from untrusted deadline strings
+  if (isNaN(deadlineDate.getTime())) {
+    return null;
+  }
+
+  // Start of day for both dates to get a clean calendar days difference
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startOfDeadline = new Date(deadlineDate.getFullYear(), deadlineDate.getMonth(), deadlineDate.getDate());
+  
+  const diffTime = startOfDeadline.getTime() - startOfToday.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+  if (diffDays < 0) {
+    return 'Overdue';
+  } else if (diffDays === 0) {
+    return 'Today';
+  } else if (diffDays === 1) {
+    return '1 day left';
+  } else {
+    return `${diffDays} days left`;
+  }
 };
 
-// Helper function to get primary tag from issue labels
-const getPrimaryTag = (labels: any[]): string | undefined => {
+/**
+ * Helper function to get primary tag from issue labels.
+ * It returns the first available label from the labels array,
+ * including its metadata like color if provided by the API.
+ * Relying on React's built-in escaping for safe rendering.
+ */
+const getPrimaryTag = (labels: any[]): { name: string; color?: string } | undefined => {
   if (!Array.isArray(labels) || labels.length === 0) return undefined;
 
-  // Check for common tags
-  const tagMap: Record<string, string> = {
-    "good first issue": "good first issue",
-    "good-first-issue": "good first issue",
-    bug: "bug",
-    enhancement: "enhancement",
-    feature: "feature",
-    performance: "performance",
-    a11y: "a11y",
-    accessibility: "a11y",
-  };
+  const firstLabel = labels[0];
+  if (typeof firstLabel === "string") {
+    return { name: firstLabel };
+  }
 
-  for (const label of labels) {
-    const labelName =
-      typeof label === "string"
-        ? label.toLowerCase()
-        : (label?.name || "").toLowerCase();
-    if (tagMap[labelName]) {
-      return tagMap[labelName];
-    }
+  if (firstLabel?.name) {
+    return {
+      name: firstLabel.name,
+      color: firstLabel.color
+    };
   }
 
   return undefined;
@@ -147,6 +177,7 @@ type ProjectType = {
   forks: string;
   issues: number;
   description: string;
+  language: string | null;
   tags: string[];
   color: string;
   ecosystem_name: string | null;
@@ -156,9 +187,9 @@ type IssueType = {
   id: string;
   title: string;
   description: string;
-  language: string;
-  daysLeft: string;
-  primaryTag?: string;
+  language?: string;
+  daysLeft?: string;
+  primaryTag?: { name: string; color?: string };
   projectId: string;
 };
 
@@ -236,6 +267,7 @@ export function DiscoverPage({
             forks: formatNumber(p.forks_count || 0),
             issues: p.open_issues_count || 0,
             description: truncateDescription(p.description) || "",
+            language: p.language || null,
             tags: Array.isArray(p.tags) ? p.tags.slice(0, 2) : [],
             color: getProjectColor(repoName),
             ecosystem_name: p.ecosystem_name ?? null,
@@ -272,14 +304,15 @@ export function DiscoverPage({
 
                 // Get project language for the issue
                 const projectData = projects.find(p => p.id === project.id);
-                const language = projectData?.tags.find(t => ['TypeScript', 'JavaScript', 'Python', 'Rust', 'Go', 'CSS', 'HTML'].includes(t)) || projectData?.tags[0] || 'TypeScript';
+                const language = projectData?.language || projectData?.tags[0];
 
+                const dl = getDaysLeft(issue.deadline);
                 issues.push({
                   id: String(issue.github_issue_id),
                   title: issue.title || 'Untitled Issue',
                   description: cleanIssueDescription(issue.description),
                   language: language,
-                  daysLeft: getDaysLeft(),
+                  ...(dl ? { daysLeft: dl } : {}),
                   primaryTag: getPrimaryTag(issue.labels || []),
                   projectId: project.id,
                 });
@@ -470,9 +503,7 @@ export function DiscoverPage({
                       {project.icon}
                     </div>
                   )}
-                  <button className="text-[#c9983a] hover:text-[#a67c2e] transition-colors">
-                    <Heart className="w-5 h-5" />
-                  </button>
+                  <button className="text-[#c9983a] hover:text-[#a67c2e] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#c9983a] rounded-lg" aria-label="Add to favorites" aria-pressed="false"><Heart className="w-5 h-5" aria-hidden="true" /></button>
                 </div>
 
                 <h4
@@ -591,6 +622,7 @@ export function DiscoverPage({
             {recommendedIssues.map((issue) => (
               <div key={issue.id} className="flex-shrink-0 w-full md:w-[480px]">
                 <IssueCard
+                  data-testid={`issue-card-${issue.id}`}
                   id={issue.id}
                   title={issue.title}
                   description={issue.description}
@@ -613,3 +645,4 @@ export function DiscoverPage({
     </div>
   );
 }
+

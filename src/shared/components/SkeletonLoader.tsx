@@ -57,6 +57,7 @@ export function SkeletonLoader({ className, variant = 'default', width, height }
     <div
       className={`${baseClasses} ${bgColor} ${className || ''}`}
       style={style}
+      data-testid="skeleton-loader"
     >
       <div
         className={`absolute inset-0 -translate-x-full bg-gradient-to-r ${shimmerGradient}${reducedMotion ? '' : ' animate-shimmer'}`}
