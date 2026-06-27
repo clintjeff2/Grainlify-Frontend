@@ -110,30 +110,25 @@ const getDaysLeft = (): string => {
   return `${days} days left`;
 };
 
-// Helper function to get primary tag from issue labels
-const getPrimaryTag = (labels: any[]): string | undefined => {
+/**
+ * Helper function to get primary tag from issue labels.
+ * It returns the first available label from the labels array,
+ * including its metadata like color if provided by the API.
+ * Relying on React's built-in escaping for safe rendering.
+ */
+const getPrimaryTag = (labels: any[]): { name: string; color?: string } | undefined => {
   if (!Array.isArray(labels) || labels.length === 0) return undefined;
 
-  // Check for common tags
-  const tagMap: Record<string, string> = {
-    "good first issue": "good first issue",
-    "good-first-issue": "good first issue",
-    bug: "bug",
-    enhancement: "enhancement",
-    feature: "feature",
-    performance: "performance",
-    a11y: "a11y",
-    accessibility: "a11y",
-  };
+  const firstLabel = labels[0];
+  if (typeof firstLabel === "string") {
+    return { name: firstLabel };
+  }
 
-  for (const label of labels) {
-    const labelName =
-      typeof label === "string"
-        ? label.toLowerCase()
-        : (label?.name || "").toLowerCase();
-    if (tagMap[labelName]) {
-      return tagMap[labelName];
-    }
+  if (firstLabel?.name) {
+    return {
+      name: firstLabel.name,
+      color: firstLabel.color
+    };
   }
 
   return undefined;
@@ -147,6 +142,7 @@ type ProjectType = {
   forks: string;
   issues: number;
   description: string;
+  language: string | null;
   tags: string[];
   color: string;
   ecosystem_name: string | null;
@@ -156,9 +152,9 @@ type IssueType = {
   id: string;
   title: string;
   description: string;
-  language: string;
+  language?: string;
   daysLeft: string;
-  primaryTag?: string;
+  primaryTag?: { name: string; color?: string };
   projectId: string;
 };
 
@@ -236,6 +232,7 @@ export function DiscoverPage({
             forks: formatNumber(p.forks_count || 0),
             issues: p.open_issues_count || 0,
             description: truncateDescription(p.description) || "",
+            language: p.language || null,
             tags: Array.isArray(p.tags) ? p.tags.slice(0, 2) : [],
             color: getProjectColor(repoName),
             ecosystem_name: p.ecosystem_name ?? null,
@@ -272,7 +269,7 @@ export function DiscoverPage({
 
                 // Get project language for the issue
                 const projectData = projects.find(p => p.id === project.id);
-                const language = projectData?.tags.find(t => ['TypeScript', 'JavaScript', 'Python', 'Rust', 'Go', 'CSS', 'HTML'].includes(t)) || projectData?.tags[0] || 'TypeScript';
+                const language = projectData?.language || projectData?.tags[0];
 
                 issues.push({
                   id: String(issue.github_issue_id),
@@ -591,6 +588,7 @@ export function DiscoverPage({
             {recommendedIssues.map((issue) => (
               <div key={issue.id} className="flex-shrink-0 w-full md:w-[480px]">
                 <IssueCard
+                  data-testid={`issue-card-${issue.id}`}
                   id={issue.id}
                   title={issue.title}
                   description={issue.description}
